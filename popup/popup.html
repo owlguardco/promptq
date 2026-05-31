@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>promptq</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <div class="logo">
+        <span class="logo-icon">⏱</span>
+        <span class="logo-text">promptq</span>
+      </div>
+      <div id="status-badge" class="badge">–</div>
+    </header>
+
+    <div id="main">
+      <div id="status-row">
+        <div class="dot" id="dot"></div>
+        <span id="status-text">Loading...</span>
+        <span id="countdown"></span>
+      </div>
+
+      <div id="queue-section">
+        <div class="section-label">Queue <span id="q-count" class="count-badge">0</span></div>
+        <div id="queue-list"></div>
+        <div id="empty-state">No prompts queued yet.</div>
+      </div>
+
+      <div id="actions">
+        <button id="open-btn" class="btn-primary">Open claude.ai ↗</button>
+        <button id="clear-btn" class="btn-ghost">Clear queue</button>
+      </div>
+
+      <div id="settings-section">
+        <div class="section-label">Settings</div>
+        <label class="toggle-row">
+          <input type="checkbox" id="autofire">
+          <span>Auto-fire on reset</span>
+        </label>
+        <label class="toggle-row">
+          <input type="checkbox" id="wait-response">
+          <span>Wait for response</span>
+        </label>
+      </div>
+    </div>
+
+    <footer>
+      <a href="https://github.com/owlguardco/promptq" target="_blank">github</a>
+      <span>·</span>
+      <span id="version">v1.0.0</span>
+    </footer>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
