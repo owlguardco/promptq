@@ -33,91 +33,135 @@
     });
   }
 
-  // Parse reset time from banner text like "Resets 2:00 AM" or "resets in 49m"
+  // Parse reset time from any text containing "resets in X" patterns.
+  // Handles all formats seen in the claude.ai meter bar and limit banners:
+  //   "resets in 2h 7m"   "resets in 49m"   "resets in 2d 19h"
+  //   "Resets 2:00 AM"    "resets in 1h"
   function parseResetTime(text) {
-    // "Resets 2:00 AM" — absolute time today/tomorrow
-    const absMatch = text.match(/resets\s+(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    // Absolute: "Resets 2:00 AM" or "resets at 2:00 AM"
+    const absMatch = text.match(/resets?\s+(?:at\s+)?(\d{1,2}):(\d{2})\s*(AM|PM)/i);
     if (absMatch) {
       let hours = parseInt(absMatch[1], 10);
       const mins = parseInt(absMatch[2], 10);
       const ampm = absMatch[3].toUpperCase();
       if (ampm === 'PM' && hours !== 12) hours += 12;
       if (ampm === 'AM' && hours === 12) hours = 0;
-      const now = new Date();
-      const reset = new Date(now);
+      const reset = new Date();
       reset.setHours(hours, mins, 0, 0);
-      if (reset <= now) reset.setDate(reset.getDate() + 1);
+      if (reset <= new Date()) reset.setDate(reset.getDate() + 1);
       return reset.getTime();
     }
 
-    // "resets in 49m" or "resets in 1h 12m"
-    const relMatch = text.match(/resets in\s+(?:(\d+)h\s*)?(\d+)m/i);
-    if (relMatch) {
-      const h = parseInt(relMatch[1] || '0', 10);
-      const m = parseInt(relMatch[2], 10);
+    // Relative days+hours: "resets in 2d 19h"
+    const dhMatch = text.match(/resets?\s+in\s+(\d+)d\s+(\d+)h/i);
+    if (dhMatch) {
+      const d = parseInt(dhMatch[1], 10), h = parseInt(dhMatch[2], 10);
+      return Date.now() + (d * 24 * 60 + h * 60) * 60 * 1000;
+    }
+
+    // Relative days only: "resets in 2d"
+    const dMatch = text.match(/resets?\s+in\s+(\d+)d/i);
+    if (dMatch) {
+      return Date.now() + parseInt(dMatch[1], 10) * 24 * 60 * 60 * 1000;
+    }
+
+    // Relative hours+minutes: "resets in 2h 7m"
+    const hmMatch = text.match(/resets?\s+in\s+(\d+)h\s+(\d+)m/i);
+    if (hmMatch) {
+      const h = parseInt(hmMatch[1], 10), m = parseInt(hmMatch[2], 10);
       return Date.now() + (h * 60 + m) * 60 * 1000;
     }
 
-    // "resets in Xd Yh" (weekly)
-    const longMatch = text.match(/resets in\s+(?:(\d+)d\s*)?(?:(\d+)h)?/i);
-    if (longMatch) {
-      const d = parseInt(longMatch[1] || '0', 10);
-      const h = parseInt(longMatch[2] || '0', 10);
-      return Date.now() + (d * 24 * 60 + h * 60) * 60 * 1000;
+    // Relative hours only: "resets in 2h"
+    const hMatch = text.match(/resets?\s+in\s+(\d+)h/i);
+    if (hMatch) {
+      return Date.now() + parseInt(hMatch[1], 10) * 60 * 60 * 1000;
+    }
+
+    // Relative minutes only: "resets in 49m"
+    const mMatch = text.match(/resets?\s+in\s+(\d+)m/i);
+    if (mMatch) {
+      return Date.now() + parseInt(mMatch[1], 10) * 60 * 1000;
     }
 
     return null;
   }
 
-  // Detect the rate limit banner in the DOM
+  // Scan the meter bar text visible in the claude.ai input area.
+  // Returns { sessionReset, weeklyReset } — both optional epoch ms.
+  // Example text: "Session: 28% · resets in 2h 7m ... Weekly: 66% · resets in 2d 19h"
+  function parseMeterBar() {
+    let sessionReset = null, weeklyReset = null;
+
+    // Find all text nodes that contain "resets in"
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode())) {
+      const t = node.textContent;
+      if (!/resets?\s+in/i.test(t) && !/resets?\s+\d/i.test(t)) continue;
+
+      const parsed = parseResetTime(t);
+      if (!parsed) continue;
+
+      // Heuristic: session resets sooner, weekly resets later
+      if (!sessionReset || parsed < sessionReset) sessionReset = parsed;
+      else if (!weeklyReset || parsed > weeklyReset) weeklyReset = parsed;
+    }
+
+    return { sessionReset, weeklyReset };
+  }
+
+  // Detect limit state. Called on DOM mutations and on a poll interval.
+  // Uses two signals:
+  //   1. Hard limit banner ("Usage limit reached") → definitely blocked
+  //   2. Meter bar "Session: X% · resets in Y" → preemptively show panel
   function detectRateLimit() {
-    const bannerTexts = [
+    const bodyText = document.body.innerText || '';
+
+    // ── Signal 1: hard limit banner ──────────────────────────────────────────
+    const hardLimitPhrases = [
       'Usage limit reached',
       'usage limit reached',
-      'You\'ve reached your',
-      'rate limit',
+      "You've reached your",
+      'Keep working', // the CTA button text in the banner
     ];
+    const isHardLimited = hardLimitPhrases.some(p => bodyText.includes(p));
 
-    const allText = document.body.innerText;
-    const isLimited = bannerTexts.some(t => allText.includes(t));
+    // ── Signal 2: meter bar always present ───────────────────────────────────
+    const { sessionReset, weeklyReset } = parseMeterBar();
 
-    if (isLimited && !state.limited) {
-      // Try to find reset time
-      const elements = document.querySelectorAll('*');
-      let resetAt = null;
-      for (const el of elements) {
-        if (el.children.length === 0 && el.textContent.toLowerCase().includes('reset')) {
-          const parsed = parseResetTime(el.textContent);
-          if (parsed) { resetAt = parsed; break; }
-        }
-      }
-      // Also scan banner area
-      if (!resetAt) {
-        const parsed = parseResetTime(allText);
-        if (parsed) resetAt = parsed;
-      }
+    // Store meter data for display even when not limited
+    if (sessionReset) state.sessionReset = sessionReset;
+    if (weeklyReset) state.weeklyReset = weeklyReset;
 
+    // Show panel proactively if meter is visible (user can queue ahead of time)
+    if ((sessionReset || weeklyReset) && !panelInjected) {
+      injectPanel();
+    }
+
+    if (isHardLimited && !state.limited) {
+      // Pick the soonest reset as the unblock time
+      const resetAt = sessionReset || weeklyReset || (Date.now() + 60 * 60 * 1000);
       state.limited = true;
-      state.resetAt = resetAt || (Date.now() + 60 * 60 * 1000); // fallback 1h
+      state.resetAt = resetAt;
       saveState();
 
       if (!panelInjected) injectPanel();
       updatePanel();
 
-      // Tell background worker to set alarm
-      chrome.runtime.sendMessage({
-        type: 'SET_ALARM',
-        resetAt: state.resetAt,
-      });
-    } else if (!isLimited && state.limited) {
+      chrome.runtime.sendMessage({ type: 'SET_ALARM', resetAt });
+
+    } else if (!isHardLimited && state.limited) {
       state.limited = false;
       saveState();
       updatePanel();
 
-      // Limit just lifted — fire queue if enabled
-      if (state.autoFire && state.queue.length > 0 && !firingInProgress) {
+      if (state.autoFire && state.queue.filter(q => q.status === 'pending').length > 0 && !firingInProgress) {
         fireQueue();
       }
+    } else if (!isHardLimited) {
+      // Not limited — still update panel meter display
+      updatePanel();
     }
   }
 
@@ -147,6 +191,7 @@
           <span id="pq-status-text">Watching...</span>
           <span id="pq-countdown"></span>
         </div>
+        <div id="pq-meter-row" style="display:none"></div>
 
         <div id="pq-queue-section">
           <div id="pq-queue-list"></div>
@@ -327,6 +372,7 @@
   function updatePanel() {
     const dot = document.getElementById('pq-dot');
     const statusText = document.getElementById('pq-status-text');
+    const meterRow = document.getElementById('pq-meter-row');
     if (!dot || !statusText) return;
 
     if (state.limited) {
@@ -339,6 +385,32 @@
       dot.className = 'pq-dot pq-dot-green';
       statusText.textContent = 'Limit clear';
     }
+
+    // Update meter row with session + weekly reset times
+    if (meterRow) {
+      const parts = [];
+      if (state.sessionReset) {
+        const ms = state.sessionReset - Date.now();
+        parts.push(`Session resets in ${formatMs(ms)}`);
+      }
+      if (state.weeklyReset) {
+        const ms = state.weeklyReset - Date.now();
+        parts.push(`Weekly resets in ${formatMs(ms)}`);
+      }
+      meterRow.textContent = parts.join('  ·  ');
+      meterRow.style.display = parts.length ? '' : 'none';
+    }
+  }
+
+  function formatMs(ms) {
+    if (ms <= 0) return 'now';
+    const d = Math.floor(ms / 86400000);
+    const h = Math.floor((ms % 86400000) / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    if (d > 0) return `${d}d ${h}h`;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}:${String(s).padStart(2, '0')}`;
   }
 
   function startCountdown() {
@@ -350,16 +422,9 @@
         return;
       }
       const ms = state.resetAt - Date.now();
-      if (ms <= 0) {
-        countdown.textContent = 'resetting...';
-        return;
-      }
-      const h = Math.floor(ms / 3600000);
-      const m = Math.floor((ms % 3600000) / 60000);
-      const s = Math.floor((ms % 60000) / 1000);
-      countdown.textContent = h > 0
-        ? `${h}h ${m}m`
-        : `${m}:${String(s).padStart(2, '0')}`;
+      countdown.textContent = ms <= 0 ? 'resetting...' : formatMs(ms);
+      // Also refresh meter row
+      updatePanel();
     }, 1000);
   }
 
@@ -574,3 +639,4 @@
     init();
   }
 })();
+
