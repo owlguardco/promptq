@@ -297,3 +297,14 @@
   #pq-empty { color: #555; }
   #pq-queue-count { color: #555; }
 }
+
+/* Meter row — shows session + weekly reset times */
+#pq-meter-row {
+  font-size: 10px;
+  color: #aaa;
+  margin: -4px 0 8px;
+  line-height: 1.4;
+}
+@media (prefers-color-scheme: dark) {
+  #pq-meter-row { color: #555; }
+}
