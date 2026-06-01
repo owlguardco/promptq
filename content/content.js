@@ -339,6 +339,13 @@
     });
     transition('IDLE');
     renderQueueList();
+
+    // Auto-clear done items after 4s so the queue stays clean
+    setTimeout(() => {
+      state.queue = state.queue.filter(q => q.status === 'pending');
+      saveState();
+      renderQueueList();
+    }, 4000);
   }
 
   // ─── Editor text insertion ─────────────────────────────────────────────────────
@@ -451,7 +458,8 @@
     panel.id = 'promptq-panel';
     panel.innerHTML = `
       <div id="pq-head">
-        <div id="pq-logo">⏱ promptq</div>
+        <div id="pq-logo">⏱ prompt<span id="pq-logo-q">q</span></div>
+        <div id="pq-shortcut">⌘⇧Q</div>
         <div id="pq-controls">
           <button id="pq-close" title="Collapse">×</button>
         </div>
@@ -758,6 +766,15 @@
 
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+  // ─── Keyboard shortcut: Cmd+Shift+Q toggles panel ───────────────────────────
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'Q') {
+      e.preventDefault();
+      if (!uiInjected) injectUI();
+      togglePanel();
+    }
+  });
+
   // ─── Background messages ──────────────────────────────────────────────────────
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'LIMIT_RESET') { state.limited = false; tick(); }
@@ -830,6 +847,7 @@
     init();
   }
 })();
+
 
 
 
