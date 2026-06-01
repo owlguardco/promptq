@@ -12,42 +12,43 @@
 }
 
 /* ── Strip ───────────────────────────────────────────────────────────────── */
+/* Strip — light mode */
 #promptq-strip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  background: #2a2a2a;
-  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(0,0,0,0.06);
+  border: 1px solid rgba(0,0,0,0.12);
   border-radius: 7px;
   cursor: pointer;
   user-select: none;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 11px;
   font-weight: 500;
-  color: #fff;
+  color: #1a1a1a;
   white-space: nowrap;
   height: 28px;
   transition: background 0.1s;
 }
-#promptq-strip:hover { background: #3a3a3a; }
+#promptq-strip:hover { background: rgba(0,0,0,0.1); }
 
 #pq-strip-dot {
   width: 6px; height: 6px; border-radius: 50%;
-  flex-shrink: 0; background: #666; transition: background 0.2s;
+  flex-shrink: 0; background: #aaa; transition: background 0.2s;
 }
-#pq-strip-dot.green { background: #7bc142; }
+#pq-strip-dot.green { background: #639922; }
 #pq-strip-dot.blue  { background: #D85A30; }
-#pq-strip-dot.red   { background: #e05c5c; }
+#pq-strip-dot.red   { background: #C0392B; }
 
-#pq-strip-label { font-weight: 600; font-size: 11px; color: #fff; }
-#pq-strip-status { font-size: 11px; color: rgba(255,255,255,0.55); max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
+#pq-strip-label { font-weight: 600; font-size: 11px; color: #1a1a1a; }
+#pq-strip-status { font-size: 11px; color: rgba(0,0,0,0.45); max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
 #pq-strip-count {
   background: #D85A30; color: #fff; font-size: 10px; font-weight: 600;
   padding: 1px 6px; border-radius: 999px; flex-shrink: 0;
 }
 #pq-strip-count.hidden { display: none; }
-#pq-strip-chevron { font-size: 9px; color: rgba(255,255,255,0.4); flex-shrink: 0; transition: transform 0.15s; }
+#pq-strip-chevron { font-size: 9px; color: rgba(0,0,0,0.3); flex-shrink: 0; transition: transform 0.15s; }
 #pq-strip-chevron.open { transform: rotate(180deg); }
 
 /* ── Panel ───────────────────────────────────────────────────────────────── */
@@ -71,6 +72,23 @@
 #promptq-panel.open { display: block; }
 
 @media (prefers-color-scheme: dark) {
+  /* Strip flips to dark */
+  #promptq-strip {
+    background: rgba(255,255,255,0.08) !important;
+    border-color: rgba(255,255,255,0.12) !important;
+    color: #f0f0f0 !important;
+  }
+  #promptq-strip:hover { background: rgba(255,255,255,0.13) !important; }
+  #pq-strip-label { color: #f0f0f0 !important; }
+  #pq-strip-status { color: rgba(255,255,255,0.45) !important; }
+  #pq-strip-chevron { color: rgba(255,255,255,0.3) !important; }
+  #pq-queue-btn {
+    background: rgba(255,255,255,0.1) !important;
+    border: 1px solid rgba(255,255,255,0.12) !important;
+    color: #f0f0f0 !important;
+  }
+  #pq-queue-btn:hover { background: rgba(255,255,255,0.16) !important; }
+
   #promptq-panel {
     background: #1e1e1e;
     border: 1px solid rgba(255,255,255,0.12);
@@ -204,9 +222,9 @@
   height: 32px;
   padding: 0 14px;
   margin-right: 6px;
-  background: #2a2a2a;
-  color: #fff;
-  border: none;
+  background: rgba(0,0,0,0.07);
+  color: #1a1a1a;
+  border: 1px solid rgba(0,0,0,0.12);
   border-radius: 8px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 12px;
@@ -215,5 +233,6 @@
   white-space: nowrap;
   transition: background 0.1s;
 }
-#pq-queue-btn:hover { background: #444; }
-#pq-queue-btn:active { background: #555; }
+#pq-queue-btn:hover { background: rgba(0,0,0,0.12); }
+#pq-queue-btn:active { background: rgba(0,0,0,0.16); }
+
