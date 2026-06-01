@@ -7,12 +7,12 @@
   flex-shrink: 0;
 }
 
-/* ── Strip ───────────────────────────────────────────────────────────────── */
+/* ── Strip — styled to blend with claude.ai toolbar buttons ─────────────── */
 #promptq-strip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
+  gap: 5px;
+  padding: 4px 8px;
   border-radius: 7px;
   cursor: pointer;
   user-select: none;
@@ -21,22 +21,29 @@
   font-weight: 500;
   white-space: nowrap;
   height: 28px;
+  margin-left: 4px;
   transition: background 0.1s;
-  /* light default */
-  background: rgba(0,0,0,0.07);
-  border: 1px solid rgba(0,0,0,0.1);
+  /* light — matches the subtle toolbar button style */
+  background: transparent;
+  border: 1px solid transparent;
+  color: #555;
+}
+#promptq-strip:hover {
+  background: rgba(0,0,0,0.06);
+  border-color: rgba(0,0,0,0.08);
   color: #1a1a1a;
 }
-#promptq-strip:hover { background: rgba(0,0,0,0.11); }
 
 /* dark strip */
 #promptq-wrapper[data-pq-theme="dark"] #promptq-strip {
-  background: rgba(255,255,255,0.1);
-  border-color: rgba(255,255,255,0.14);
-  color: #f0f0f0;
+  color: #aaa;
+  background: transparent;
+  border-color: transparent;
 }
 #promptq-wrapper[data-pq-theme="dark"] #promptq-strip:hover {
-  background: rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.1);
+  color: #f0f0f0;
 }
 
 #pq-strip-dot {
@@ -71,7 +78,7 @@
 #promptq-panel {
   display: none;
   position: absolute;
-  bottom: calc(100% + 10px);
+  bottom: calc(100% + 36px);
   left: 0;
   width: 320px;
   border-radius: 12px;
