@@ -196,8 +196,10 @@
       const streaming = isStreaming();
       const arrowUp   = isArrowReady();
 
-      // Inject as soon as the composer is in the DOM
+      // Inject UI as soon as composer is in DOM
       if (!uiInjected) injectUI();
+      // Retry queue button separately — send button may load after UI injection
+      if (uiInjected && !queueBtnInjected) injectQueueButton();
 
       if (limited) {
         if (machineState !== 'LIMITED') {
@@ -370,9 +372,13 @@
     btn.id = 'pq-queue-btn';
     btn.textContent = '+ Queue';
     btn.title = 'Add to promptq queue (instead of sending now)';
+    // Use mousedown — fires before React's synthetic click handlers
+    // Don't stopPropagation or React's input blur won't fire first
+    btn.addEventListener('mousedown', (e) => {
+      e.preventDefault(); // prevent focus loss from composer
+    });
     btn.addEventListener('click', (e) => {
       e.preventDefault();
-      e.stopPropagation();
       addPrompt();
     });
 
@@ -607,13 +613,18 @@
     let text = '';
 
     if (editable) {
-      text = editable.innerText.trim();
+      // Get text — filter out ProseMirror placeholder (empty paragraph = just newline)
+      const raw = editable.innerText || editable.textContent || '';
+      text = raw.trim();
+      // Ignore if it matches the placeholder text
+      const placeholder = editable.getAttribute('data-placeholder') || '';
+      if (text === placeholder) text = '';
       if (text) {
-        // Clear the composer
+        // Clear the composer via selectAll + delete
         editable.focus();
         document.execCommand('selectAll', false, null);
         document.execCommand('delete', false, null);
-        editable.dispatchEvent(new Event('input', { bubbles: true }));
+        editable.dispatchEvent(new InputEvent('input', { bubbles: true }));
       }
     } else if (ta) {
       text = ta.value.trim();
@@ -773,6 +784,7 @@
     init();
   }
 })();
+
 
 
 
