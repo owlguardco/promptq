@@ -529,10 +529,10 @@
       }
     }
 
-    // Inject as fixed element anchored to the bottom of the page,
-    // aligned with the composer bar. Never touches the DOM layout.
-    document.body.appendChild(wrapper);
-    LOG('injected as fixed composer strip');
+    // Insert wrapper directly before the composer in the DOM flow.
+    // This puts the strip naturally above the meter bar.
+    anchor.parent.insertBefore(wrapper, anchor.composer);
+    LOG('injected above composer');
 
     // ── Inject "+ Queue" button next to the send button ──
     injectQueueButton();
@@ -834,6 +834,7 @@
     init();
   }
 })();
+
 
 
 
