@@ -1,4 +1,4 @@
-<img src="logo.svg" alt="promptq" width="360"/>
+<p align="center"><img src="logo.svg" alt="promptq" width="600"/></p>
 
 > Queue prompts when Claude hits its rate limit or while it's responding. They fire automatically the moment Claude is ready — keep your flow.
 
