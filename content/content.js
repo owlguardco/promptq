@@ -22,6 +22,16 @@
   let uiInjected    = false;
   let panelOpen     = false;
   let observerStarted = false;
+  let renderTimer   = null;
+
+  function scheduleRender() {
+    if (renderTimer) clearTimeout(renderTimer);
+    renderTimer = setTimeout(() => {
+      renderTimer = null;
+      renderQueueList();
+      updateUI();
+    }, 50); // collapse rapid successive calls into one render
+  }
 
   // ─── Persistence ──────────────────────────────────────────────────────────────
   function saveState() {
@@ -637,7 +647,7 @@
     if (!text) return;
     state.queue.push({ id: Date.now(), text, status: 'pending' });
     saveState();
-    renderQueueList();
+    scheduleRender();
     if (!panelOpen) openPanel();
     LOG('queued:', text.slice(0, 50));
   }
@@ -784,6 +794,7 @@
     init();
   }
 })();
+
 
 
 
