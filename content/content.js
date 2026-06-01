@@ -24,6 +24,30 @@
   let observerStarted = false;
   let renderTimer   = null;
 
+  // Detect claude.ai's actual theme and apply it to our elements.
+  // claude.ai sets class="dark" or data-theme="dark" on <html> or <body>.
+  function isDarkMode() {
+    const html = document.documentElement;
+    const body = document.body;
+    return (
+      html.classList.contains('dark') ||
+      body.classList.contains('dark') ||
+      html.getAttribute('data-theme') === 'dark' ||
+      body.getAttribute('data-theme') === 'dark' ||
+      html.getAttribute('data-color-scheme') === 'dark' ||
+      window.matchMedia('(prefers-color-scheme: dark)').matches
+    );
+  }
+
+  function applyTheme() {
+    const wrapper = document.getElementById('promptq-wrapper');
+    const panel   = document.getElementById('promptq-panel');
+    if (!wrapper || !panel) return;
+    const dark = isDarkMode();
+    wrapper.setAttribute('data-pq-theme', dark ? 'dark' : 'light');
+    panel.setAttribute('data-pq-theme', dark ? 'dark' : 'light');
+  }
+
   function scheduleRender() {
     if (renderTimer) clearTimeout(renderTimer);
     renderTimer = setTimeout(() => {
@@ -529,10 +553,18 @@
 
     renderQueueList();
     updateUI();
+    applyTheme();
     startCountdown();
 
-    // Open panel by default so users immediately see the input
-    // They can collapse it with the × button
+    // Watch for theme changes (user switches dark/light while page is open)
+    new MutationObserver(applyTheme).observe(document.documentElement, {
+      attributes: true, attributeFilter: ['class', 'data-theme', 'data-color-scheme']
+    });
+    new MutationObserver(applyTheme).observe(document.body, {
+      attributes: true, attributeFilter: ['class', 'data-theme', 'data-color-scheme']
+    });
+
+    // Open panel by default
     openPanel();
   }
 
@@ -794,6 +826,7 @@
     init();
   }
 })();
+
 
 
 
