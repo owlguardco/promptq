@@ -1,103 +1,146 @@
-/* promptq — injected panel styles */
+/* promptq — docked composer styles */
 
+/* ── Strip (always visible, docked above or beside composer) ── */
+#promptq-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #f7f6f3;
+  border: 0.5px solid rgba(0,0,0,0.09);
+  border-radius: 9px;
+  cursor: pointer;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 12px;
+  color: #1a1a1a;
+  user-select: none;
+  transition: background 0.15s;
+  margin-bottom: 6px;
+  position: relative;
+}
+#promptq-strip:hover { background: #f0ede8; }
+
+#pq-strip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #aaa;
+  transition: background 0.3s;
+}
+#pq-strip-dot.green { background: #639922; box-shadow: 0 0 0 2px rgba(99,153,34,0.18); }
+#pq-strip-dot.blue  { background: #378ADD; box-shadow: 0 0 0 2px rgba(55,138,221,0.18); }
+#pq-strip-dot.red   { background: #E24B4A; box-shadow: 0 0 0 2px rgba(226,75,74,0.18); }
+
+#pq-strip-label {
+  font-weight: 600;
+  font-size: 12px;
+  color: #1a1a1a;
+}
+#pq-strip-status {
+  font-size: 11px;
+  color: #888;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#pq-strip-count {
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+#pq-strip-count.hidden { display: none; }
+#pq-strip-chevron {
+  font-size: 10px;
+  color: #bbb;
+  flex-shrink: 0;
+  transition: transform 0.2s;
+}
+#pq-strip-chevron.open { transform: rotate(180deg); }
+
+/* ── Panel (expands above the strip) ── */
 #promptq-panel {
-  position: fixed;
-  bottom: 24px;
-  right: 24px;
-  width: 340px;
-  z-index: 999999;
-  background: #ffffff;
-  border: 1px solid rgba(0,0,0,0.12);
-  border-radius: 14px;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.06);
+  background: #fff;
+  border: 0.5px solid rgba(0,0,0,0.1);
+  border-radius: 13px;
+  overflow: hidden;
+  margin-bottom: 6px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.09);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 13px;
   color: #1a1a1a;
-  overflow: hidden;
-  user-select: none;
+  display: none;
 }
+#promptq-panel.open { display: block; }
 
-/* Header */
-#pq-header {
+#pq-head {
+  background: #f7f6f3;
+  border-bottom: 0.5px solid rgba(0,0,0,0.07);
+  padding: 9px 13px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
-  background: #f7f6f3;
-  border-bottom: 1px solid rgba(0,0,0,0.08);
-  cursor: grab;
 }
-#pq-header:active { cursor: grabbing; }
-
 #pq-logo {
   display: flex;
   align-items: center;
   gap: 6px;
   font-weight: 600;
   font-size: 13px;
-  letter-spacing: -0.01em;
 }
-.pq-icon { font-size: 14px; }
-#pq-title { color: #1a1a1a; }
-
-#pq-controls {
-  display: flex;
-  gap: 4px;
-}
+#pq-controls { display: flex; gap: 4px; }
 #pq-controls button {
   background: none;
-  border: none;
+  border: 0.5px solid rgba(0,0,0,0.1);
   cursor: pointer;
-  color: #888;
-  font-size: 16px;
+  color: #aaa;
+  font-size: 14px;
   line-height: 1;
-  padding: 2px 5px;
-  border-radius: 4px;
+  padding: 2px 6px;
+  border-radius: 5px;
 }
-#pq-controls button:hover { background: rgba(0,0,0,0.07); color: #333; }
+#pq-controls button:hover { background: rgba(0,0,0,0.05); color: #555; }
 
-/* Body */
-#pq-body { padding: 12px 14px; }
+#pq-body { padding: 11px 13px; display: flex; flex-direction: column; gap: 9px; }
 
-/* Status bar */
+/* Status row */
 #pq-status-bar {
   display: flex;
   align-items: center;
   gap: 7px;
-  margin-bottom: 10px;
   font-size: 12px;
   color: #555;
 }
-.pq-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: #888;
-}
-.pq-dot-red { background: #e24b4a; box-shadow: 0 0 0 2px rgba(226,75,74,0.2); }
+.pq-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: #aaa; }
+.pq-dot-red   { background: #E24B4A; box-shadow: 0 0 0 2px rgba(226,75,74,0.2); }
 .pq-dot-green { background: #639922; box-shadow: 0 0 0 2px rgba(99,153,34,0.2); }
-.pq-dot-blue { background: #185fa5; box-shadow: 0 0 0 2px rgba(24,95,165,0.2); }
+.pq-dot-blue  { background: #378ADD; box-shadow: 0 0 0 2px rgba(55,138,221,0.2); }
 #pq-countdown {
   margin-left: auto;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  color: #e24b4a;
+  color: #E24B4A;
   font-size: 12px;
+}
+#pq-meter-row {
+  font-size: 10px;
+  color: #bbb;
+  margin-top: -4px;
+  line-height: 1.4;
 }
 
 /* Queue list */
-#pq-queue-section {
-  max-height: 220px;
-  overflow-y: auto;
-  margin-bottom: 10px;
-}
-#pq-queue-list { display: flex; flex-direction: column; gap: 6px; }
-
+#pq-queue-section { max-height: 200px; overflow-y: auto; }
+#pq-queue-list { display: flex; flex-direction: column; gap: 5px; }
 #pq-empty {
   text-align: center;
-  padding: 16px 0;
-  color: #aaa;
+  padding: 14px 0;
+  color: #bbb;
   font-size: 12px;
   line-height: 1.6;
 }
@@ -105,68 +148,37 @@
 .pq-item {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 7px;
   background: #f9f9f8;
-  border: 1px solid rgba(0,0,0,0.08);
+  border: 0.5px solid rgba(0,0,0,0.07);
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 7px 9px;
   transition: border-color 0.15s;
-  user-select: text;
 }
-.pq-item:hover { border-color: rgba(0,0,0,0.15); }
-.pq-item-pos {
-  font-size: 10px;
-  font-weight: 600;
-  color: #bbb;
-  min-width: 14px;
-  padding-top: 1px;
-}
-.pq-item-text {
-  flex: 1;
-  font-size: 12px;
-  line-height: 1.5;
-  color: #1a1a1a;
-  word-break: break-word;
-}
-.pq-item-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
-}
+.pq-item:hover { border-color: rgba(0,0,0,0.13); }
+.pq-item-pos { font-size: 10px; font-weight: 600; color: #ccc; min-width: 14px; padding-top: 1px; }
+.pq-item-text { flex: 1; font-size: 12px; line-height: 1.5; color: #1a1a1a; word-break: break-word; }
+.pq-item-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
 .pq-item-actions button {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #bbb;
-  font-size: 13px;
-  padding: 1px 3px;
-  border-radius: 3px;
-  line-height: 1;
+  background: none; border: none; cursor: pointer;
+  color: #ccc; font-size: 12px; padding: 1px 3px; border-radius: 3px; line-height: 1;
 }
-.pq-item-actions button:hover:not(:disabled) { color: #555; background: rgba(0,0,0,0.06); }
-.pq-item-actions button:disabled { opacity: 0.3; cursor: default; }
-.pq-remove:hover { color: #e24b4a !important; }
+.pq-item-actions button:hover:not(:disabled) { color: #555; background: rgba(0,0,0,0.05); }
+.pq-item-actions button:disabled { opacity: 0.25; cursor: default; }
+.pq-remove:hover { color: #E24B4A !important; }
 
-/* Status variants */
-.pq-item.pq-status-sending { border-color: #185fa5; background: #e6f1fb; }
-.pq-item.pq-status-done { opacity: 0.5; }
-.pq-item.pq-status-failed { border-color: #e24b4a; background: #fcebeb; }
+.pq-item.pq-status-sending { border-color: #185FA5; background: #E6F1FB; }
+.pq-item.pq-status-sending .pq-item-text { color: #0C447C; }
+.pq-item.pq-status-done { opacity: 0.45; }
+.pq-item.pq-status-failed { border-color: #E24B4A; background: #FCEBEB; }
 
-.pq-badge {
-  font-size: 10px;
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 999px;
-}
-.pq-badge-sending { background: #e6f1fb; color: #0c447c; }
-.pq-badge-done { background: #eaf3de; color: #3b6d11; }
-.pq-badge-failed { background: #fcebeb; color: #a32d2d; }
+.pq-badge { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 999px; flex-shrink: 0; }
+.pq-badge-sending { background: #E6F1FB; color: #0C447C; }
+.pq-badge-done    { background: #EAF3DE; color: #3B6D11; }
+.pq-badge-failed  { background: #FCEBEB; color: #A32D2D; }
 
-/* Add section */
-#pq-add-section {
-  margin-bottom: 10px;
-}
+/* Add input */
+#pq-add-section { display: flex; flex-direction: column; gap: 6px; }
 #pq-input {
   width: 100%;
   box-sizing: border-box;
@@ -174,137 +186,82 @@
   font-size: 12px;
   color: #1a1a1a;
   background: #f9f9f8;
-  border: 1px solid rgba(0,0,0,0.1);
+  border: 0.5px solid rgba(0,0,0,0.1);
   border-radius: 8px;
-  padding: 8px 10px;
-  resize: vertical;
-  min-height: 56px;
+  padding: 7px 10px;
+  resize: none;
+  min-height: 52px;
   outline: none;
   transition: border-color 0.15s;
 }
-#pq-input:focus { border-color: rgba(0,0,0,0.25); background: #fff; }
+#pq-input:focus { border-color: rgba(0,0,0,0.22); background: #fff; }
 #pq-input::placeholder { color: #bbb; }
-
-#pq-add-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 6px;
-}
-#pq-queue-count {
-  font-size: 11px;
-  color: #aaa;
-}
+#pq-add-row { display: flex; align-items: center; justify-content: space-between; }
+#pq-queue-count { font-size: 11px; color: #bbb; }
 #pq-add-btn {
-  background: #1a1a1a;
-  color: #fff;
-  border: none;
-  border-radius: 7px;
-  padding: 6px 14px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  font-family: inherit;
-  transition: background 0.15s;
+  background: #1a1a1a; color: #fff;
+  border: none; border-radius: 7px;
+  padding: 5px 13px; font-size: 12px; font-weight: 500;
+  cursor: pointer; font-family: inherit;
 }
 #pq-add-btn:hover { background: #333; }
 
 /* Footer */
 #pq-footer {
-  border-top: 1px solid rgba(0,0,0,0.07);
-  padding-top: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  border-top: 0.5px solid rgba(0,0,0,0.07);
+  padding-top: 9px;
+  display: flex; flex-direction: column; gap: 5px;
 }
 .pq-toggle-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: #555;
-  cursor: pointer;
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: #666; cursor: pointer;
 }
-.pq-toggle-row input[type="checkbox"] {
-  width: 14px;
-  height: 14px;
-  cursor: pointer;
-  accent-color: #1a1a1a;
-}
-
-#pq-fire-row {
-  display: flex;
-  gap: 6px;
-  margin-top: 4px;
-}
+.pq-toggle-row input { accent-color: #1a1a1a; width: 13px; height: 13px; cursor: pointer; }
+#pq-fire-row { display: flex; gap: 6px; margin-top: 3px; }
 #pq-fire-btn {
-  flex: 1;
-  background: #185fa5;
-  color: #fff;
-  border: none;
-  border-radius: 7px;
-  padding: 7px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  font-family: inherit;
-  transition: background 0.15s;
+  flex: 1; background: #185FA5; color: #E6F1FB;
+  border: none; border-radius: 7px;
+  padding: 6px 12px; font-size: 12px; font-weight: 500;
+  cursor: pointer; font-family: inherit;
 }
-#pq-fire-btn:hover:not(:disabled) { background: #0c447c; }
+#pq-fire-btn:hover:not(:disabled) { background: #0C447C; }
 #pq-fire-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 #pq-clear-btn {
-  background: none;
-  border: 1px solid rgba(0,0,0,0.1);
-  border-radius: 7px;
-  padding: 7px 10px;
-  font-size: 12px;
-  color: #888;
-  cursor: pointer;
-  font-family: inherit;
+  background: none; border: 0.5px solid rgba(0,0,0,0.1);
+  border-radius: 7px; padding: 6px 10px;
+  font-size: 12px; color: #888; cursor: pointer; font-family: inherit;
 }
-#pq-clear-btn:hover { background: rgba(0,0,0,0.04); color: #444; }
+#pq-clear-btn:hover { background: rgba(0,0,0,0.04); }
 
 /* Scrollbar */
-#pq-queue-section::-webkit-scrollbar { width: 4px; }
-#pq-queue-section::-webkit-scrollbar-track { background: transparent; }
-#pq-queue-section::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 2px; }
+#pq-queue-section::-webkit-scrollbar { width: 3px; }
+#pq-queue-section::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 2px; }
 
-/* Dark mode compatibility */
+/* Dark mode */
 @media (prefers-color-scheme: dark) {
-  #promptq-panel {
-    background: #1e1e1e;
-    border-color: rgba(255,255,255,0.1);
-    color: #f0f0f0;
-  }
-  #pq-header { background: #2a2a2a; border-bottom-color: rgba(255,255,255,0.08); }
-  #pq-title { color: #f0f0f0; }
-  #pq-controls button { color: #888; }
+  #promptq-strip { background: #2a2a2a; border-color: rgba(255,255,255,0.08); color: #f0f0f0; }
+  #promptq-strip:hover { background: #333; }
+  #pq-strip-label { color: #f0f0f0; }
+  #pq-strip-status { color: #777; }
+  #pq-strip-count { background: #f0f0f0; color: #1a1a1a; }
+  #promptq-panel { background: #1e1e1e; border-color: rgba(255,255,255,0.1); color: #f0f0f0; }
+  #pq-head { background: #2a2a2a; border-bottom-color: rgba(255,255,255,0.07); }
+  #pq-controls button { border-color: rgba(255,255,255,0.1); color: #666; }
   #pq-controls button:hover { background: rgba(255,255,255,0.07); color: #ccc; }
-  #pq-status-bar { color: #999; }
-  .pq-item { background: #2a2a2a; border-color: rgba(255,255,255,0.08); }
-  .pq-item:hover { border-color: rgba(255,255,255,0.15); }
+  #pq-status-bar { color: #888; }
+  #pq-meter-row { color: #555; }
+  .pq-item { background: #2a2a2a; border-color: rgba(255,255,255,0.07); }
   .pq-item-text { color: #f0f0f0; }
-  .pq-item.pq-status-sending { background: #0d2137; border-color: #185fa5; }
-  #pq-input { background: #2a2a2a; border-color: rgba(255,255,255,0.1); color: #f0f0f0; }
-  #pq-input:focus { background: #333; border-color: rgba(255,255,255,0.2); }
+  .pq-item.pq-status-sending { background: #0d2137; }
+  #pq-input { background: #2a2a2a; border-color: rgba(255,255,255,0.09); color: #f0f0f0; }
+  #pq-input:focus { background: #333; border-color: rgba(255,255,255,0.18); }
   #pq-add-btn { background: #f0f0f0; color: #1a1a1a; }
   #pq-add-btn:hover { background: #ccc; }
   #pq-footer { border-top-color: rgba(255,255,255,0.07); }
-  .pq-toggle-row { color: #999; }
+  .pq-toggle-row { color: #888; }
   .pq-toggle-row input { accent-color: #f0f0f0; }
-  #pq-clear-btn { border-color: rgba(255,255,255,0.1); color: #888; }
-  #pq-clear-btn:hover { background: rgba(255,255,255,0.06); }
+  #pq-clear-btn { border-color: rgba(255,255,255,0.1); color: #777; }
   #pq-empty { color: #555; }
   #pq-queue-count { color: #555; }
-}
-
-/* Meter row — shows session + weekly reset times */
-#pq-meter-row {
-  font-size: 10px;
-  color: #aaa;
-  margin: -4px 0 8px;
-  line-height: 1.4;
-}
-@media (prefers-color-scheme: dark) {
-  #pq-meter-row { color: #555; }
+  #promptq-strip { box-shadow: none; }
 }
