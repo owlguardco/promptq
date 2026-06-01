@@ -140,27 +140,27 @@
   }
 
   // ─── Composer container detection ─────────────────────────────────────────────
-  // Strategy: find the contenteditable input, then find its closest ancestor
-  // that also contains a send/stop button. That's the composer form wrapper.
-  // We inject our wrapper div BEFORE that element in the DOM.
+  // Strategy: anchor on the contenteditable input ALONE — the send button is often
+  // absent on an idle/empty composer, so requiring it meant the strip never mounted.
+  // Walk up a few levels from the input and pick the widest ancestor that is still
+  // inside the page's main column (never <body>/<html>). Inject our wrapper before it.
   function findComposerAnchor() {
     const editable = document.querySelector('div[contenteditable="true"], [role="textbox"]');
     if (!editable) return null;
 
-    const sendBtn = getSendButton() || getStopButton();
-    if (!sendBtn) return null;
-
-    // Walk up from editable until we find a common ancestor with the send button
-    let el = editable.parentElement;
-    while (el && el !== document.body) {
-      if (el.contains(sendBtn)) {
-        // This el contains both the input and send button = the composer form
-        // Return el's parent so we can insert our wrapper before el
-        return { composer: el, parent: el.parentElement };
-      }
-      el = el.parentElement;
+    // Walk up 3–4 levels, tracking the widest ancestor that stays inside the main
+    // column. Stop before <body>/<html> so the strip lands in the content flow.
+    let best = editable.parentElement;
+    let el   = editable.parentElement;
+    for (let i = 0; i < 4 && el && el.parentElement; i++) {
+      const next = el.parentElement;
+      if (next === document.body || next === document.documentElement) break;
+      if (el.getBoundingClientRect().width >= best.getBoundingClientRect().width) best = el;
+      el = next;
     }
-    return null;
+
+    if (!best || !best.parentElement) return null;
+    return { composer: best, parent: best.parentElement };
   }
 
   // ─── State machine ────────────────────────────────────────────────────────────
