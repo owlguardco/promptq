@@ -195,3 +195,26 @@
 /* Scrollbar */
 #pq-queue-section::-webkit-scrollbar { width: 3px; }
 #pq-queue-section::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 2px; }
+
+/* ── + Queue button — sits left of the send arrow ───────────────────────── */
+#pq-queue-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 12px;
+  margin-right: 6px;
+  background: #1a1a1a;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.1s, opacity 0.1s;
+  vertical-align: middle;
+}
+#pq-queue-btn:hover { background: #333; }
+#pq-queue-btn:active { opacity: 0.75; }
