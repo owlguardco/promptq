@@ -40,21 +40,27 @@
 
   // ─── Submit button ────────────────────────────────────────────────────────────
   function getSendButton() {
-    // Try known aria-labels first
+    // Try known aria-labels / testids first, then broad wildcard matches.
     for (const sel of [
       'button[aria-label="Send message"]',
       'button[aria-label="Send Message"]',
       'button[data-testid="send-button"]',
+      'button[aria-label*="send" i]',
+      'button[data-testid*="send"]',
     ]) {
       const b = document.querySelector(sel);
       if (b) return b;
     }
-    // Fallback: any enabled button near a contenteditable
+    // Fallback: walk up from the contenteditable and find a button sibling/cousin
+    // that is not disabled and has an SVG child (the arrow icon). Prefer those;
+    // otherwise return the last enabled button found at that level.
     const editable = document.querySelector('div[contenteditable="true"]');
     if (editable) {
       let el = editable.parentElement;
       while (el && el !== document.body) {
         const btns = [...el.querySelectorAll('button')].filter(b => !b.disabled);
+        const withSvg = btns.filter(b => b.querySelector('svg'));
+        if (withSvg.length) return withSvg[withSvg.length - 1];
         if (btns.length) return btns[btns.length - 1];
         el = el.parentElement;
       }
