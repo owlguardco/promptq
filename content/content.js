@@ -178,17 +178,45 @@
   }
 
   function parseMeterBar() {
-    const resets = [];
+    let sessionReset = null;
+    let weeklyReset  = null;
+
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     let node;
     while ((node = walker.nextNode())) {
       const t = node.textContent;
       if (!/resets?\s+in/i.test(t)) continue;
       const parsed = parseResetTime(t);
-      if (parsed) resets.push(parsed);
+      if (!parsed) continue;
+
+      // Tag by keyword in the same text chunk
+      const lc = t.toLowerCase();
+      if (lc.includes('weekly')) {
+        if (!weeklyReset) weeklyReset = parsed;
+      } else if (lc.includes('session')) {
+        if (!sessionReset) sessionReset = parsed;
+      } else {
+        // Unknown — assign to whichever slot is empty, shorter time = session
+        if (!sessionReset) sessionReset = parsed;
+        else if (!weeklyReset && parsed > sessionReset) weeklyReset = parsed;
+      }
     }
-    resets.sort((a, b) => a - b);
-    return { sessionReset: resets[0] || null, weeklyReset: resets[1] || null };
+
+    // Also scan the full bottom bar text as one string for combined nodes
+    // e.g. "Session: 43% · resets in 3h 45m ... Weekly: 5% · resets in 1d 21h"
+    const allText = document.body.innerText || '';
+    const sessionMatch = allText.match(/Session[^·\n]*resets?\s+in\s+([^·\n]+)/i);
+    const weeklyMatch  = allText.match(/Weekly[^·\n]*resets?\s+in\s+([^·\n]+)/i);
+    if (sessionMatch && !sessionReset) {
+      const p = parseResetTime('resets in ' + sessionMatch[1].trim());
+      if (p) sessionReset = p;
+    }
+    if (weeklyMatch && !weeklyReset) {
+      const p = parseResetTime('resets in ' + weeklyMatch[1].trim());
+      if (p) weeklyReset = p;
+    }
+
+    return { sessionReset, weeklyReset };
   }
 
   function isHardLimited() {
@@ -290,6 +318,15 @@
     LOG(`firing ${pending.length} prompts`);
 
     for (const item of pending) {
+      // Hard stop if rate limited — hold the queue, don't mark as failed
+      if (isHardLimited()) {
+        LOG('rate limited — holding queue until reset');
+        item.status = 'pending'; // leave as pending, not failed
+        transition('LIMITED');
+        saveState(); renderQueueList();
+        return; // background alarm will re-trigger tick() when limit clears
+      }
+
       item.status = 'sending';
       saveState(); renderQueueList();
 
@@ -802,6 +839,7 @@
     init();
   }
 })();
+
 
 
 
