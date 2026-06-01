@@ -178,44 +178,26 @@
   }
 
   function parseMeterBar() {
+    // claude.ai now shows only one reset timer — Weekly.
+    // Bar text: "Weekly: X% · resets in 1d 14h"
+    // We grab the first "resets in …" we find and treat it as the weekly reset.
     let sessionReset = null;
     let weeklyReset  = null;
 
-    // The bottom bar reads:
-    //   "Session: 43% · resets in 3h 45m   [bars]   Weekly: 5% · resets in 1d 21h"
-    // but the label ("Session:" / "Weekly:") and its countdown ("resets in …")
-    // render in SEPARATE spans, with progress-bar <div>s between them. So a single
-    // text node holds either a label or a countdown, rarely both — keyword-tagging
-    // each node fails (a bare countdown node has no label) and the old "shorter =
-    // session" fallback let weekly mirror the session value.
-    //
-    // Robust strategy: locate the smallest element that contains a countdown plus a
-    // label, read its innerText (preserves left-to-right visual order across child
-    // spans, skips the bar <div>s), then slice the Session and Weekly chunks by
-    // label position and parse each independently.
-    let container = null;
-    for (const el of document.querySelectorAll('div, section, footer, p')) {
-      const txt = el.textContent || '';
-      if (!/resets?\s+in/i.test(txt)) continue;
-      if (!/session/i.test(txt) && !/weekly/i.test(txt)) continue;
-      if (!container || txt.length < (container.textContent || '').length) container = el;
-    }
+    const allText = document.body.innerText || '';
 
-    const text = container ? (container.innerText || container.textContent || '') : '';
-    if (text) {
-      const sIdx = text.search(/session/i);
-      const wIdx = text.search(/weekly/i);
+    // Try Weekly first
+    const wm = allText.match(/Weekly[^\n]*?resets?\s+in\s+([\d]+d[\s\d]+h|[\d]+h[\s\d]+m|[\d]+h|[\d]+m|[\d]+d)/i);
+    if (wm) weeklyReset = parseResetTime('resets in ' + wm[1].trim());
 
-      // Each label owns the text from itself up to the next label (or end of bar),
-      // so the Session chunk can never pick up the Weekly countdown and vice versa.
-      if (sIdx !== -1) {
-        const end = wIdx > sIdx ? wIdx : text.length;
-        sessionReset = parseResetTime(text.slice(sIdx, end));
-      }
-      if (wIdx !== -1) {
-        const end = sIdx > wIdx ? sIdx : text.length;
-        weeklyReset = parseResetTime(text.slice(wIdx, end));
-      }
+    // Try Session (may come back in future)
+    const sm = allText.match(/Session[^\n]*?resets?\s+in\s+([\d]+d[\s\d]+h|[\d]+h[\s\d]+m|[\d]+h|[\d]+m|[\d]+d)/i);
+    if (sm) sessionReset = parseResetTime('resets in ' + sm[1].trim());
+
+    // Fallback: just grab any "resets in X" if no labels found
+    if (!weeklyReset && !sessionReset) {
+      const any = allText.match(/resets?\s+in\s+([\d]+d[\s\d]+h|[\d]+h[\s\d]+m|[\d]+h|[\d]+m|[\d]+d)/i);
+      if (any) weeklyReset = parseResetTime('resets in ' + any[1].trim());
     }
 
     return { sessionReset, weeklyReset };
@@ -646,7 +628,10 @@
         parts.push(`Session resets in ${formatMs(state.sessionReset - Date.now())}`);
       if (state.weeklyReset && state.weeklyReset > Date.now())
         parts.push(`Weekly resets in ${formatMs(state.weeklyReset - Date.now())}`);
-      meterRow.textContent   = parts.join('  ·  ');
+      // If only one exists show it without a label prefix
+      meterRow.textContent   = parts.length === 1
+        ? parts[0].replace(/^(Session|Weekly) resets in /, 'Resets in ')
+        : parts.join('  ·  ');
       meterRow.style.display = parts.length ? '' : 'none';
     }
   }
@@ -841,6 +826,7 @@
     init();
   }
 })();
+
 
 
 
