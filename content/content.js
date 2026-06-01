@@ -529,10 +529,10 @@
       }
     }
 
-    // Inject as a fixed sidebar to the LEFT of the main chat column.
-    // The sidebar is position:fixed so it never disrupts the DOM layout.
+    // Inject as fixed element anchored to the bottom of the page,
+    // aligned with the composer bar. Never touches the DOM layout.
     document.body.appendChild(wrapper);
-    LOG('injected as fixed sidebar');
+    LOG('injected as fixed composer strip');
 
     // ── Inject "+ Queue" button next to the send button ──
     injectQueueButton();
@@ -834,6 +834,7 @@
     init();
   }
 })();
+
 
 
 
