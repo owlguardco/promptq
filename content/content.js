@@ -368,9 +368,10 @@
     uiInjected = true;
     LOG('injecting UI');
 
-    // Wrapper holds both panel + strip, inserted before the composer
+    // Wrapper is position:relative container so the panel can float above
     const wrapper = document.createElement('div');
     wrapper.id = 'promptq-wrapper';
+    wrapper.style.position = 'relative';
 
     // Panel (hidden until toggled)
     const panel = document.createElement('div');
@@ -431,8 +432,35 @@
     wrapper.appendChild(panel);
     wrapper.appendChild(strip);
 
-    // Insert wrapper before the composer element
-    anchor.parent.insertBefore(wrapper, anchor.composer);
+    // Find the bottom bar of the composer (where meter text lives)
+    // and prepend our strip there — so it sits LEFT of the meter text
+    const bottomBar = anchor.composer.querySelector('[class*="bottom"], [class*="footer"], [class*="bar"]')
+      || anchor.composer.lastElementChild?.lastElementChild
+      || anchor.composer;
+
+    // Try to find the row that contains the meter text "Session:"
+    let meterRow = null;
+    const allEls = anchor.composer.querySelectorAll('*');
+    for (const el of allEls) {
+      if (el.children.length === 0 && el.textContent.includes('Session:')) {
+        meterRow = el.parentElement;
+        break;
+      }
+    }
+
+    if (meterRow) {
+      // Insert our wrapper as the first child of the meter row
+      // so strip appears LEFT of "Session: X% · resets in Xh"
+      meterRow.style.display = 'flex';
+      meterRow.style.alignItems = 'center';
+      meterRow.style.gap = '8px';
+      meterRow.insertBefore(wrapper, meterRow.firstChild);
+      LOG('injected into meter row');
+    } else {
+      // Fallback: insert before the composer
+      anchor.parent.insertBefore(wrapper, anchor.composer);
+      LOG('injected before composer (fallback)');
+    }
 
     // ── Wire events ──
     strip.addEventListener('click', togglePanel);
@@ -698,5 +726,6 @@
     init();
   }
 })();
+
 
 
