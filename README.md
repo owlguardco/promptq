@@ -1,6 +1,6 @@
-# promptq
+<img src="logo.svg" alt="promptq" width="360"/>
 
-> Keep your flow. Queue prompts when Claude hits its rate limit — they fire automatically when the limit resets.
+> Queue prompts when Claude hits its rate limit or while it's responding. They fire automatically the moment Claude is ready — keep your flow.
 
 ![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)
 ![Manifest V3](https://img.shields.io/badge/Manifest-V3-green)
@@ -78,3 +78,4 @@ PRs welcome. Keep it simple — this should stay a single-purpose tool that does
 ## License
 
 MIT
+
