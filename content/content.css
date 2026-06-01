@@ -1,118 +1,164 @@
 /*
-  promptq — fixed left sidebar, always visible
-  Sits in the left margin of claude.ai, never overlaps chat content.
+  promptq — fixed strip that sits at the bottom of the screen
+  aligned with claude.ai's composer bar. Panel expands upward.
+  Never overlaps conversation content.
 */
 
-/* ── Wrapper = the sidebar itself ────────────────────────────────────────── */
+/* ── Wrapper — fixed to bottom, left-aligned with composer ──────────────── */
 #promptq-wrapper {
   position: fixed;
-  top: 50%;
-  left: 0;
-  transform: translateY(-50%);
-  width: 220px;
-  z-index: 99999;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  /* light */
-  background: #ffffff;
-  border: 1px solid rgba(0,0,0,0.1);
-  border-left: none;
-  border-radius: 0 8px 8px 0;
-  box-shadow: 2px 0 12px rgba(0,0,0,0.08);
-  color: #1a1a1a;
-  overflow: hidden;
-}
-
-/* dark sidebar */
-#promptq-wrapper[data-pq-theme="dark"] {
-  background: #1e1e1e;
-  border-color: rgba(255,255,255,0.1);
-  color: #f0f0f0;
-  box-shadow: 2px 0 12px rgba(0,0,0,0.4);
-}
-
-/* ── Strip = sidebar header bar ─────────────────────────────────────────── */
-#promptq-strip {
+  bottom: 52px; /* sits just above the meter bar */
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 660px;
+  width: calc(100% - 340px); /* matches claude.ai's composer width */
+  z-index: 99998;
   display: flex;
+  align-items: flex-end;
+  pointer-events: none; /* let clicks pass through except on our elements */
+}
+#promptq-wrapper > * { pointer-events: auto; }
+
+/* ── Strip — the always-visible pill ─────────────────────────────────────── */
+#promptq-strip {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 4px 12px;
+  height: 26px;
+  border-radius: 4px;
   cursor: pointer;
   user-select: none;
-  font-size: 12px;
-  font-weight: 600;
-  border-bottom: 1px solid rgba(0,0,0,0.07);
-  background: #f5f4f1;
-  color: #1a1a1a;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
   transition: background 0.1s;
+  /* light mode */
+  background: rgba(0,0,0,0.05);
+  border: 1px solid rgba(0,0,0,0.1);
+  color: #444;
 }
+#promptq-strip:hover {
+  background: rgba(0,0,0,0.09);
+  color: #1a1a1a;
+}
+/* dark mode */
 #promptq-wrapper[data-pq-theme="dark"] #promptq-strip {
-  background: #252525;
-  border-bottom-color: rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(255,255,255,0.12);
+  color: #bbb;
+}
+#promptq-wrapper[data-pq-theme="dark"] #promptq-strip:hover {
+  background: rgba(255,255,255,0.11);
   color: #f0f0f0;
 }
-#promptq-strip:hover { background: #eeecea; }
-#promptq-wrapper[data-pq-theme="dark"] #promptq-strip:hover { background: #2e2e2e; }
 
 #pq-strip-dot {
-  width: 7px; height: 7px; border-radius: 50%;
-  flex-shrink: 0; background: #aaa; transition: background 0.2s;
+  width: 6px; height: 6px; border-radius: 50%;
+  flex-shrink: 0; background: #bbb; transition: background 0.2s;
 }
 #pq-strip-dot.green { background: #639922; }
 #pq-strip-dot.blue  { background: #D85A30; }
 #pq-strip-dot.red   { background: #C0392B; }
 
-#pq-strip-label { font-weight: 600; font-size: 12px; flex: 1; }
-#pq-strip-status { display: none; } /* hidden in sidebar — status shown in panel */
+#pq-strip-label { font-weight: 600; }
+#pq-strip-status {
+  font-size: 11px; color: rgba(0,0,0,0.4);
+  overflow: hidden; text-overflow: ellipsis; max-width: 180px;
+}
+#promptq-wrapper[data-pq-theme="dark"] #pq-strip-status { color: rgba(255,255,255,0.35); }
+
 #pq-strip-count {
   background: #D85A30; color: #fff;
   font-size: 10px; font-weight: 600;
-  padding: 1px 6px; border-radius: 999px;
+  padding: 0 5px; border-radius: 999px; min-width: 16px; text-align: center;
 }
 #pq-strip-count.hidden { display: none; }
-#pq-strip-chevron { font-size: 10px; color: rgba(0,0,0,0.25); transition: transform 0.15s; }
+#pq-strip-chevron {
+  font-size: 9px; color: rgba(0,0,0,0.25); transition: transform 0.15s;
+}
 #promptq-wrapper[data-pq-theme="dark"] #pq-strip-chevron { color: rgba(255,255,255,0.25); }
 #pq-strip-chevron.open { transform: rotate(180deg); }
 
-/* ── Panel = sidebar body, always open ───────────────────────────────────── */
+/* ── Panel — expands upward from strip ───────────────────────────────────── */
 #promptq-panel {
   display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: 300px;
+  border-radius: 8px;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 13px;
+  z-index: 99999;
+  /* light */
+  background: #ffffff;
+  border: 1px solid rgba(0,0,0,0.12);
+  color: #1a1a1a;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.06);
 }
 #promptq-panel.open { display: block; }
+
+/* dark panel */
+#promptq-panel[data-pq-theme="dark"] {
+  background: #1e1e1e;
+  border-color: rgba(255,255,255,0.1);
+  color: #f0f0f0;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+}
+
+/* Header */
+#pq-head {
+  padding: 8px 12px;
+  display: flex; align-items: center; justify-content: space-between;
+  background: #f5f4f1;
+  border-bottom: 1px solid rgba(0,0,0,0.07);
+}
+#promptq-panel[data-pq-theme="dark"] #pq-head {
+  background: #252525;
+  border-bottom-color: rgba(255,255,255,0.07);
+}
+#pq-logo { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 5px; color: inherit; }
+#pq-controls button {
+  background: none; border: 1px solid rgba(0,0,0,0.1); border-radius: 3px;
+  cursor: pointer; color: #999; font-size: 14px; line-height: 1;
+  padding: 1px 5px; font-family: inherit;
+}
+#promptq-panel[data-pq-theme="dark"] #pq-controls button { border-color: rgba(255,255,255,0.1); color: #666; }
+#pq-controls button:hover { background: rgba(0,0,0,0.05); color: #333; }
+#promptq-panel[data-pq-theme="dark"] #pq-controls button:hover { background: rgba(255,255,255,0.07); color: #ccc; }
 
 /* Body */
 #pq-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
 
 /* Status */
-#pq-status-bar { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #888; }
-#promptq-wrapper[data-pq-theme="dark"] #pq-status-bar { color: #777; }
+#pq-status-bar { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #777; }
+#promptq-panel[data-pq-theme="dark"] #pq-status-bar { color: #888; }
 .pq-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: #ccc; }
 .pq-dot-green { background: #639922; }
 .pq-dot-blue  { background: #D85A30; }
 .pq-dot-red   { background: #C0392B; }
 #pq-countdown { margin-left: auto; font-weight: 500; font-variant-numeric: tabular-nums; font-size: 11px; color: #C0392B; }
-#pq-meter-row { font-size: 10px; color: #bbb; margin-top: -4px; line-height: 1.4; }
-#promptq-wrapper[data-pq-theme="dark"] #pq-meter-row { color: #555; }
-
-/* Divider */
-.pq-divider { height: 1px; background: rgba(0,0,0,0.07); margin: 0 -12px; }
-#promptq-wrapper[data-pq-theme="dark"] .pq-divider { background: rgba(255,255,255,0.07); }
+#pq-meter-row { font-size: 10px; color: #bbb; margin-top: -4px; }
+#promptq-panel[data-pq-theme="dark"] #pq-meter-row { color: #555; }
 
 /* Queue list */
-#pq-queue-section { max-height: 220px; overflow-y: auto; }
+#pq-queue-section { max-height: 180px; overflow-y: auto; }
 #pq-queue-list { display: flex; flex-direction: column; gap: 4px; }
-#pq-empty { text-align: center; padding: 12px 0; color: #bbb; font-size: 11px; line-height: 1.6; }
-#promptq-wrapper[data-pq-theme="dark"] #pq-empty { color: #555; }
+#pq-empty { text-align: center; padding: 10px 0; color: #bbb; font-size: 11px; line-height: 1.6; }
+#promptq-panel[data-pq-theme="dark"] #pq-empty { color: #555; }
 
 .pq-item {
-  display: flex; align-items: flex-start; gap: 5px;
+  display: flex; align-items: flex-start; gap: 6px;
   background: #f7f6f3; border: 1px solid rgba(0,0,0,0.07);
-  border-radius: 5px; padding: 5px 7px;
+  border-radius: 5px; padding: 5px 8px;
 }
-#promptq-wrapper[data-pq-theme="dark"] .pq-item { background: #2a2a2a; border-color: rgba(255,255,255,0.07); }
-.pq-item-pos { font-size: 10px; color: #bbb; min-width: 12px; padding-top: 1px; flex-shrink: 0; }
+#promptq-panel[data-pq-theme="dark"] .pq-item { background: #2a2a2a; border-color: rgba(255,255,255,0.07); }
+.pq-item-pos { font-size: 10px; color: #bbb; min-width: 12px; padding-top: 2px; flex-shrink: 0; }
 .pq-item-text { flex: 1; font-size: 11px; line-height: 1.5; color: #1a1a1a; word-break: break-word; }
-#promptq-wrapper[data-pq-theme="dark"] .pq-item-text { color: #e0e0e0; }
+#promptq-panel[data-pq-theme="dark"] .pq-item-text { color: #e0e0e0; }
 .pq-item-actions { display: flex; align-items: center; gap: 1px; flex-shrink: 0; }
 .pq-item-actions button {
   background: none; border: none; cursor: pointer;
@@ -133,32 +179,31 @@
 /* Input */
 #pq-add-section { display: flex; flex-direction: column; gap: 5px; }
 #pq-input {
-  width: 100%; font-family: inherit; font-size: 11px; color: #1a1a1a;
+  width: 100%; box-sizing: border-box; font-family: inherit; font-size: 11px; color: #1a1a1a;
   background: #f7f6f3; border: 1px solid rgba(0,0,0,0.1);
-  border-radius: 5px; padding: 6px 8px; resize: none; min-height: 56px; outline: none;
-  box-sizing: border-box;
+  border-radius: 5px; padding: 6px 8px; resize: none; min-height: 48px; outline: none;
 }
-#promptq-wrapper[data-pq-theme="dark"] #pq-input { background: #2a2a2a; border-color: rgba(255,255,255,0.1); color: #f0f0f0; }
-#pq-input:focus { border-color: rgba(0,0,0,0.2); background: #fff; }
-#promptq-wrapper[data-pq-theme="dark"] #pq-input:focus { background: #333; border-color: rgba(255,255,255,0.2); }
+#promptq-panel[data-pq-theme="dark"] #pq-input { background: #2a2a2a; border-color: rgba(255,255,255,0.1); color: #f0f0f0; }
+#pq-input:focus { border-color: rgba(0,0,0,0.18); background: #fff; }
+#promptq-panel[data-pq-theme="dark"] #pq-input:focus { background: #333; border-color: rgba(255,255,255,0.2); }
 #pq-input::placeholder { color: #bbb; }
-#promptq-wrapper[data-pq-theme="dark"] #pq-input::placeholder { color: #555; }
+#promptq-panel[data-pq-theme="dark"] #pq-input::placeholder { color: #555; }
 
 #pq-add-row { display: flex; align-items: center; justify-content: space-between; }
 #pq-queue-count { font-size: 10px; color: #bbb; }
-#promptq-wrapper[data-pq-theme="dark"] #pq-queue-count { color: #555; }
+#promptq-panel[data-pq-theme="dark"] #pq-queue-count { color: #555; }
 #pq-add-btn {
   background: #1a1a1a; color: #fff; border: none; border-radius: 4px;
   padding: 4px 10px; font-size: 11px; font-weight: 500; cursor: pointer; font-family: inherit;
 }
-#promptq-wrapper[data-pq-theme="dark"] #pq-add-btn { background: #f0f0f0; color: #1a1a1a; }
+#promptq-panel[data-pq-theme="dark"] #pq-add-btn { background: #f0f0f0; color: #1a1a1a; }
 #pq-add-btn:hover { opacity: 0.8; }
 
 /* Footer */
-#pq-footer { border-top: 1px solid rgba(0,0,0,0.07); padding-top: 8px; display: flex; flex-direction: column; gap: 5px; }
-#promptq-wrapper[data-pq-theme="dark"] #pq-footer { border-top-color: rgba(255,255,255,0.07); }
+#pq-footer { border-top: 1px solid rgba(0,0,0,0.07); padding-top: 7px; display: flex; flex-direction: column; gap: 5px; }
+#promptq-panel[data-pq-theme="dark"] #pq-footer { border-top-color: rgba(255,255,255,0.07); }
 .pq-toggle-row { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #777; cursor: pointer; }
-#promptq-wrapper[data-pq-theme="dark"] .pq-toggle-row { color: #888; }
+#promptq-panel[data-pq-theme="dark"] .pq-toggle-row { color: #888; }
 .pq-toggle-row input { accent-color: #D85A30; width: 12px; height: 12px; cursor: pointer; }
 #pq-fire-row { display: flex; gap: 4px; margin-top: 2px; }
 #pq-fire-btn {
@@ -169,26 +214,23 @@
 #pq-fire-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 #pq-clear-btn {
   background: none; border: 1px solid rgba(0,0,0,0.1); border-radius: 4px;
-  padding: 5px 8px; font-size: 11px; color: #888; cursor: pointer; font-family: inherit;
+  padding: 5px 7px; font-size: 11px; color: #888; cursor: pointer; font-family: inherit;
 }
-#promptq-wrapper[data-pq-theme="dark"] #pq-clear-btn { border-color: rgba(255,255,255,0.1); color: #777; }
+#promptq-panel[data-pq-theme="dark"] #pq-clear-btn { border-color: rgba(255,255,255,0.1); color: #777; }
 #pq-clear-btn:hover { background: rgba(0,0,0,0.04); }
 
 /* Scrollbar */
 #pq-queue-section::-webkit-scrollbar { width: 3px; }
 #pq-queue-section::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 2px; }
 
-/* ── + Queue button (in composer toolbar) ────────────────────────────────── */
+/* ── + Queue button in composer ──────────────────────────────────────────── */
 #pq-queue-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  height: 24px; padding: 0 10px;
-  background: transparent;
-  color: #555;
-  border: 1px solid rgba(0,0,0,0.12);
-  border-radius: 4px;
+  height: 24px; padding: 0 10px; margin-left: 4px;
+  background: transparent; color: #555;
+  border: 1px solid rgba(0,0,0,0.1); border-radius: 4px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 11px; font-weight: 500; cursor: pointer; white-space: nowrap;
   transition: background 0.1s;
-  margin-left: 4px;
 }
 #pq-queue-btn:hover { background: rgba(0,0,0,0.05); color: #1a1a1a; }
