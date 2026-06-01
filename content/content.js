@@ -457,13 +457,20 @@
       if (!success) break;
 
       if (state.waitForResponse) {
-        await waitForResponse();
-      }
-
-      // Delay between prompts
-      if (pending.indexOf(item) < pending.length - 1) {
+        // Wait for the orange arrow to come back — Claude has finished responding
+        const ready = await waitForSubmitReady();
+        if (!ready) {
+          item.status = 'failed';
+          saveState();
+          renderQueueList();
+          break; // timed out waiting, stop the queue
+        }
+      } else {
         await sleep(state.delayBetween);
       }
+
+      // Small gap between prompts even in non-wait mode
+      await sleep(800);
     }
 
     firingInProgress = false;
@@ -480,55 +487,68 @@
 
   async function submitPrompt(text) {
     try {
-      // Find the claude.ai textarea
-      const textarea = findTextarea();
-      if (!textarea) {
-        console.warn('[promptq] Could not find textarea');
-        return false;
+      // Gate: only submit when the orange send arrow is active.
+      // If Claude is still streaming, wait for it to finish first.
+      if (!isSubmitReady()) {
+        console.log('[promptq] waiting for submit button to become ready...');
+        const ready = await waitForSubmitReady();
+        if (!ready) {
+          console.warn('[promptq] timed out waiting for submit button');
+          return false;
+        }
       }
 
-      // Focus and set value using React's internal setter
-      textarea.focus();
-      await sleep(200);
-
-      // React synthetic event approach
-      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-        window.HTMLTextAreaElement.prototype, 'value'
-      )?.set || Object.getOwnPropertyDescriptor(
-        window.HTMLElement.prototype, 'innerText'
-      )?.set;
-
-      // Try contenteditable first (claude.ai uses a div[contenteditable])
+      // claude.ai uses a ProseMirror div[contenteditable] as its input.
+      // We set .innerText on it and fire React-compatible input events,
+      // then click the now-enabled send button.
       const editable = findContentEditable();
       if (editable) {
         editable.focus();
-        await sleep(100);
-        editable.innerText = text;
+        await sleep(150);
+
+        // Clear existing content first
+        editable.innerText = '';
         editable.dispatchEvent(new Event('input', { bubbles: true }));
+        await sleep(80);
+
+        // Set the new prompt text
+        editable.innerText = text;
+        editable.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: text }));
         editable.dispatchEvent(new Event('change', { bubbles: true }));
-        await sleep(300);
+        await sleep(250);
+
+        // Click send — findSubmitButton() only returns when button is enabled
         const submitBtn = findSubmitButton();
         if (submitBtn) {
           submitBtn.click();
+          console.log('[promptq] submitted via send button click');
           return true;
         }
-        // Fallback: Enter key
-        editable.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
+
+        // Fallback: Ctrl+Enter / Enter
+        editable.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter', code: 'Enter', keyCode: 13,
+          ctrlKey: false, shiftKey: false, bubbles: true
+        }));
         return true;
       }
 
-      // Plain textarea fallback
-      if (textarea && nativeInputValueSetter) {
-        nativeInputValueSetter.call(textarea, text);
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        textarea.dispatchEvent(new Event('change', { bubbles: true }));
-        await sleep(300);
-        const submitBtn = findSubmitButton();
-        if (submitBtn) { submitBtn.click(); return true; }
-        textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
-        return true;
+      // Textarea fallback (older claude.ai builds)
+      const textarea = findTextarea();
+      if (textarea) {
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+        if (setter) {
+          setter.call(textarea, text);
+          textarea.dispatchEvent(new Event('input', { bubbles: true }));
+          await sleep(250);
+          const submitBtn = findSubmitButton();
+          if (submitBtn) { submitBtn.click(); return true; }
+          textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+          return true;
+        }
       }
 
+      console.warn('[promptq] could not find input element');
       return false;
     } catch (err) {
       console.error('[promptq] submitPrompt error:', err);
@@ -549,37 +569,61 @@
            null;
   }
 
-  function findSubmitButton() {
-    // Look for send/submit button near the input area
-    const selectors = [
-      'button[aria-label*="Send"]',
-      'button[aria-label*="send"]',
-      'button[type="submit"]',
-      'button[data-testid*="send"]',
-    ];
-    for (const sel of selectors) {
-      const btn = document.querySelector(sel);
-      if (btn && !btn.disabled) return btn;
-    }
-    // Fallback: last enabled button in the input container
-    const buttons = [...document.querySelectorAll('button')].filter(b => !b.disabled);
-    return buttons[buttons.length - 1] || null;
+  // ─── Submit button — the real "ready" signal ─────────────────────────────────
+  // The orange arrow button is enabled  → Claude is idle, ready for input.
+  // The stop/square button is visible   → Claude is streaming a response.
+  // This is the ONLY signal we trust for sequencing queued prompts.
+
+  function getSubmitButton() {
+    // Try known selectors first
+    const byLabel = document.querySelector(
+      'button[aria-label="Send message"], button[aria-label="Send Message"], button[data-testid="send-button"]'
+    );
+    if (byLabel && !byLabel.disabled) return byLabel;
+
+    // Broader: any enabled button inside the composer / form area
+    const inForm = [...document.querySelectorAll('form button, [role="textbox"] ~ * button')]
+      .filter(b => !b.disabled);
+    if (inForm.length) return inForm[inForm.length - 1];
+
+    return null;
   }
 
-  async function waitForResponse() {
-    // Wait for a "thinking" state then wait for it to clear
-    await sleep(1000);
-    const maxWait = 5 * 60 * 1000; // 5 min max
+  function isSubmitReady() {
+    // Orange arrow is shown and enabled — Claude is not streaming
+    const btn = getSubmitButton();
+    if (!btn || btn.disabled) return false;
+    const label = (btn.getAttribute('aria-label') || '').toLowerCase();
+    // If the button is in "stop" mode, Claude is still going
+    if (label.includes('stop') || label.includes('cancel')) return false;
+    return true;
+  }
+
+  function isClaudeStreaming() {
+    // Stop button visible = actively streaming
+    if (document.querySelector('button[aria-label*="Stop"], button[aria-label*="stop"], button[aria-label*="Cancel"]')) return true;
+    if (document.querySelector('[data-is-streaming="true"]')) return true;
+    // Submit disabled also means busy
+    const btn = document.querySelector('button[aria-label*="Send"], button[data-testid="send-button"]');
+    if (btn && btn.disabled) return true;
+    return false;
+  }
+
+  // Block until the orange send arrow is live again (Claude finished responding).
+  async function waitForSubmitReady() {
+    const maxWait = 10 * 60 * 1000;
     const start = Date.now();
+    await sleep(1500); // give streaming a moment to start
     while (Date.now() - start < maxWait) {
-      const isThinking = document.querySelector(
-        '[data-is-streaming], .thinking, [aria-label*="thinking"], [aria-label*="Loading"]'
-      );
-      if (!isThinking) break;
-      await sleep(1000);
+      if (isSubmitReady()) return true;
+      await sleep(500);
     }
-    // Extra buffer after response completes
-    await sleep(1500);
+    return false; // timed out — give up on this item
+  }
+
+  function findSubmitButton() {
+    // Called by submitPrompt — only returns a button when Claude is actually ready
+    return isSubmitReady() ? getSubmitButton() : null;
   }
 
   function sleep(ms) {
@@ -639,4 +683,5 @@
     init();
   }
 })();
+
 
