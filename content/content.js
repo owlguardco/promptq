@@ -262,6 +262,56 @@
     renderQueueList();
   }
 
+  // ─── Editor text insertion ─────────────────────────────────────────────────────
+  // claude.ai's composer is a ProseMirror editor with no dispatchable EditorView on
+  // the DOM, so we drive it with the same events its handlers listen for:
+  //   focus → select-all (Ctrl+A) → beforeinput insertText → paste fallback → execCommand.
+  function insertEditableText(editable, text) {
+    const head = text.slice(0, Math.min(8, text.length));
+    const landed = () => editable.textContent.includes(head);
+
+    editable.focus();
+
+    // Select all current content via Ctrl+A so the insert replaces it. Dispatch the
+    // synthetic keyboard event AND back it with the Selection API (synthetic keys
+    // don't trigger the browser's native select-all).
+    editable.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'a', code: 'KeyA', keyCode: 65, ctrlKey: true, metaKey: true,
+      bubbles: true, cancelable: true,
+    }));
+    const sel = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(editable);
+    sel.removeAllRanges();
+    sel.addRange(range);
+
+    // 1) beforeinput with inputType insertText — ProseMirror's primary insert path.
+    try {
+      const beforeInput = new InputEvent('beforeinput', {
+        inputType: 'insertText', data: text, bubbles: true, cancelable: true,
+      });
+      const notPrevented = editable.dispatchEvent(beforeInput);
+      editable.dispatchEvent(new InputEvent('input', {
+        inputType: 'insertText', data: text, bubbles: true,
+      }));
+      if (!notPrevented || landed()) return;
+    } catch (e) { LOG('beforeinput dispatch failed', e); }
+
+    // 2) Fallback: a synthetic paste carrying the text via clipboardData.
+    try {
+      const dt = new DataTransfer();
+      dt.setData('text/plain', text);
+      const pasteEvt = new ClipboardEvent('paste', {
+        clipboardData: dt, bubbles: true, cancelable: true,
+      });
+      const notPrevented = editable.dispatchEvent(pasteEvt);
+      if (!notPrevented || landed()) return;
+    } catch (e) { LOG('paste dispatch failed', e); }
+
+    // 3) Last resort: legacy execCommand.
+    document.execCommand('insertText', false, text);
+  }
+
   // ─── Submit ───────────────────────────────────────────────────────────────────
   async function submitPrompt(text) {
     try {
@@ -273,10 +323,7 @@
       if (editable) {
         editable.focus();
         await sleep(100);
-        document.execCommand('selectAll', false, null);
-        document.execCommand('delete', false, null);
-        await sleep(50);
-        document.execCommand('insertText', false, text);
+        insertEditableText(editable, text);
         await sleep(250);
         const btn = getSendButton();
         if (btn && !btn.disabled) { btn.click(); return true; }
