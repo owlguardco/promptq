@@ -10,17 +10,22 @@
 
 ## What it does
 
-When Claude hits your usage limit, promptq injects a small queue panel into claude.ai. Type your follow-up prompts there — they'll fire in sequence the moment your limit resets. No more losing your train of thought or checking back manually.
+promptq injects a queue panel into claude.ai. Type your next prompts while Claude is still responding — or while you're rate limited. They fire automatically in sequence the moment Claude is ready. No more losing your train of thought or checking back manually.
+
+**Two triggers, one queue:**
+- **Claude responding** — queued prompts fire the instant the send arrow comes back
+- **Rate limit hit** — queued prompts hold until the limit resets, then fire automatically
 
 **Features**
-- Detects rate limit banners automatically via DOM observer
-- Countdown timer shows exactly when the limit resets
-- Queue up to as many prompts as you want, reorder them by priority
-- Auto-fires when limit resets (or manually trigger anytime)
-- "Wait for response" mode — sends each prompt only after Claude replies
-- Desktop notifications when the queue finishes
-- Draggable panel, dark mode support
-- Zero data collection, everything stays local
+- Strip docks above the composer bar — always visible, click to expand
+- Type prompts in the queue panel, hit `+ Add`
+- Reorder queue items with ↑ ↓ buttons
+- Countdown timer shows exactly when session and weekly limits reset
+- Auto-fire on reset (toggleable)
+- Wait for response mode — sends each prompt only after Claude replies
+- Desktop notification when queue finishes
+- Light and dark mode
+- Zero data collection — everything stays local on your device
 
 ---
 
@@ -28,54 +33,47 @@ When Claude hits your usage limit, promptq injects a small queue panel into clau
 
 ### Load unpacked (developer mode)
 
-1. Clone this repo:
+1. Clone the repo:
    ```bash
    git clone https://github.com/owlguardco/promptq.git
    ```
 
-2. Open Chrome and navigate to `chrome://extensions`
+2. Open Chrome or Brave → `chrome://extensions`
 
-3. Enable **Developer mode** (toggle in the top right)
+3. Enable **Developer mode** (toggle, top right)
 
-4. Click **Load unpacked** and select the `promptq` folder
+4. Click **Load unpacked** → select the `promptq` folder
 
-5. Visit [claude.ai](https://claude.ai) — promptq will activate automatically when a rate limit is detected
+5. Go to [claude.ai](https://claude.ai) — the promptq strip appears above the composer bar
+
+---
+
+## How to use
+
+1. Type a prompt in the **queue panel textarea** and hit **+ Add**
+2. Add as many prompts as you want — they stack in order
+3. Hit **Fire queue now** to start, or leave **Auto-fire** on and it runs automatically
+4. If Claude is mid-response, it waits for the arrow to come back before sending the next
+5. If you hit the rate limit, the queue holds and fires the moment the limit resets
 
 ---
 
 ## How it works
 
-**Content script** (`content/content.js`) runs on claude.ai. It watches the DOM with a `MutationObserver` for rate limit banners, parses the reset time, and injects the queue panel UI. When the limit lifts, it uses React's native input setter to programmatically type each prompt and submit it.
+**Content script** (`content/content.js`) — the core. Watches the claude.ai DOM with a debounced `MutationObserver`. Detects two signals: the send button state (orange arrow = ready, stop square = streaming) and the rate limit banner. Runs a 4-state machine: `IDLE → STREAMING → LIMITED → FIRING`. Injects the queue UI above the composer bar.
 
-**Background service worker** (`background/service-worker.js`) manages a `chrome.alarms` timer for the reset — this works even if the tab is backgrounded or the browser is idle. It also handles desktop notifications when the queue completes.
+**Background service worker** (`background/service-worker.js`) — sets a `chrome.alarms` timer for the rate limit reset time. Fires even when the tab is backgrounded. Sends a `LIMIT_RESET` message to the content script when the alarm triggers.
 
-**Popup** (`popup/popup.html`) gives a quick status view and settings from the extension icon.
-
----
-
-## Usage
-
-1. Hit Claude's rate limit on claude.ai
-2. The promptq panel appears in the bottom-right corner
-3. Type your next prompts and click **Add** (or Cmd+Enter)
-4. Drag items to reorder — the queue fires top-to-bottom
-5. promptq will auto-fire when the limit resets
-
-**Manual fire:** If the limit has cleared but you want to use the queue, click **Fire Queue Now**.
-
-**Settings:**
-- **Auto-fire on reset** — fires queue automatically when limit clears
-- **Wait for response** — waits for Claude to fully respond before sending the next prompt (recommended)
+**Popup** (`popup/popup.html`) — quick status and settings from the extension icon.
 
 ---
 
 ## Contributing
 
-PRs welcome. Keep it simple — this should stay a single-purpose tool that does one thing well.
+PRs welcome. Keep it focused — one tool, one job.
 
 ---
 
 ## License
 
 MIT
-
