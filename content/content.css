@@ -1,4 +1,8 @@
-/* promptq — docked into claude.ai's composer bottom bar */
+/*
+  promptq styles
+  Uses explicit colors with light/dark media query.
+  No reliance on claude.ai CSS variables since they vary by build.
+*/
 
 #promptq-wrapper {
   position: relative;
@@ -7,113 +11,110 @@
   flex-shrink: 0;
 }
 
-/* ── Strip — sits inline left of the meter text ─────────────────────────── */
+/* ── Strip ───────────────────────────────────────────────────────────────── */
 #promptq-strip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  background: #1a1a1a;
-  border: none;
-  border-radius: 6px;
+  background: #2a2a2a;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 7px;
   cursor: pointer;
   user-select: none;
-  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 11px;
   font-weight: 500;
   color: #fff;
   white-space: nowrap;
+  height: 28px;
   transition: background 0.1s;
-  height: 26px;
 }
-#promptq-strip:hover { background: #333; }
+#promptq-strip:hover { background: #3a3a3a; }
 
 #pq-strip-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: #666;
-  transition: background 0.2s;
+  width: 6px; height: 6px; border-radius: 50%;
+  flex-shrink: 0; background: #666; transition: background 0.2s;
 }
 #pq-strip-dot.green { background: #7bc142; }
-#pq-strip-dot.blue  { background: #5ba3d9; }
+#pq-strip-dot.blue  { background: #D85A30; }
 #pq-strip-dot.red   { background: #e05c5c; }
 
-#pq-strip-label { font-weight: 600; font-size: 11px; }
-#pq-strip-status { font-size: 11px; color: rgba(255,255,255,0.6); max-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+#pq-strip-label { font-weight: 600; font-size: 11px; color: #fff; }
+#pq-strip-status { font-size: 11px; color: rgba(255,255,255,0.55); max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
 #pq-strip-count {
-  background: #D85A30;
-  color: #fff;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 0px 5px;
-  border-radius: 999px;
-  flex-shrink: 0;
-  min-width: 16px;
-  text-align: center;
+  background: #D85A30; color: #fff; font-size: 10px; font-weight: 600;
+  padding: 1px 6px; border-radius: 999px; flex-shrink: 0;
 }
 #pq-strip-count.hidden { display: none; }
-#pq-strip-chevron { font-size: 9px; color: rgba(255,255,255,0.5); flex-shrink: 0; transition: transform 0.15s; }
+#pq-strip-chevron { font-size: 9px; color: rgba(255,255,255,0.4); flex-shrink: 0; transition: transform 0.15s; }
 #pq-strip-chevron.open { transform: rotate(180deg); }
 
-/* ── Panel — floats UP from the strip ───────────────────────────────────── */
+/* ── Panel ───────────────────────────────────────────────────────────────── */
 #promptq-panel {
   display: none;
   position: absolute;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + 10px);
   left: 0;
   width: 320px;
-  background: #ffffff;
-  border: 1px solid rgba(0,0,0,0.15);
   border-radius: 12px;
   overflow: hidden;
-  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 13px;
+  z-index: 999999;
+  /* Light mode defaults */
+  background: #ffffff;
+  border: 1px solid rgba(0,0,0,0.14);
   color: #1a1a1a;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.14), 0 1px 4px rgba(0,0,0,0.06);
-  z-index: 99999;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.16), 0 2px 8px rgba(0,0,0,0.08);
 }
 #promptq-panel.open { display: block; }
 
-/* Dark mode */
 @media (prefers-color-scheme: dark) {
   #promptq-panel {
     background: #1e1e1e;
-    border-color: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.12);
     color: #f0f0f0;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
   }
-  #pq-head { background: #2a2a2a; border-bottom-color: rgba(255,255,255,0.08); }
-  .pq-item { background: #2a2a2a; border-color: rgba(255,255,255,0.08); }
-  .pq-item-text { color: #f0f0f0; }
-  #pq-input { background: #2a2a2a; border-color: rgba(255,255,255,0.1); color: #f0f0f0; }
-  #pq-input:focus { background: #333; }
-  #pq-footer { border-top-color: rgba(255,255,255,0.08); }
-  .pq-toggle-row { color: #999; }
-  #pq-clear-btn { border-color: rgba(255,255,255,0.1); color: #888; }
-  #pq-empty { color: #555; }
-  #pq-queue-count { color: #555; }
-  #pq-meter-row { color: #555; }
-  #pq-status-bar { color: #888; }
+  #pq-head { background: #252525 !important; border-bottom-color: rgba(255,255,255,0.08) !important; }
+  #pq-logo { color: #f0f0f0 !important; }
+  #pq-controls button { border-color: rgba(255,255,255,0.1) !important; color: #777 !important; }
+  #pq-controls button:hover { background: rgba(255,255,255,0.06) !important; color: #ccc !important; }
+  #pq-status-bar { color: #999 !important; }
+  #pq-meter-row { color: #555 !important; }
+  .pq-item { background: #2a2a2a !important; border-color: rgba(255,255,255,0.07) !important; }
+  .pq-item-text { color: #e0e0e0 !important; }
+  .pq-item-pos { color: #555 !important; }
+  #pq-empty { color: #555 !important; }
+  #pq-input {
+    background: #2a2a2a !important; border-color: rgba(255,255,255,0.1) !important;
+    color: #f0f0f0 !important;
+  }
+  #pq-input:focus { background: #333 !important; border-color: rgba(255,255,255,0.2) !important; }
+  #pq-input::placeholder { color: #555 !important; }
+  #pq-add-btn { background: #f0f0f0 !important; color: #1a1a1a !important; }
+  #pq-add-btn:hover { background: #ccc !important; }
+  #pq-footer { border-top-color: rgba(255,255,255,0.08) !important; }
+  .pq-toggle-row { color: #888 !important; }
+  #pq-queue-count { color: #555 !important; }
+  #pq-clear-btn { border-color: rgba(255,255,255,0.1) !important; color: #777 !important; }
+  #pq-clear-btn:hover { background: rgba(255,255,255,0.05) !important; }
 }
 
 /* Header */
 #pq-head {
-  background: #f7f6f3;
+  background: #f5f4f1;
   border-bottom: 1px solid rgba(0,0,0,0.08);
   padding: 9px 13px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: flex; align-items: center; justify-content: space-between;
 }
 #pq-logo { font-size: 12px; font-weight: 600; color: #1a1a1a; display: flex; align-items: center; gap: 5px; }
 #pq-controls button {
   background: none; border: 1px solid rgba(0,0,0,0.1); border-radius: 4px;
-  cursor: pointer; color: #999; font-size: 14px; line-height: 1;
-  padding: 1px 6px; font-family: inherit;
+  cursor: pointer; color: #999; font-size: 14px; line-height: 1; padding: 1px 6px; font-family: inherit;
 }
-#pq-controls button:hover { background: rgba(0,0,0,0.06); color: #333; }
+#pq-controls button:hover { background: rgba(0,0,0,0.05); color: #333; }
 
 /* Body */
 #pq-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
@@ -125,9 +126,9 @@
 .pq-dot-blue  { background: #D85A30; }
 .pq-dot-red   { background: #C0392B; }
 #pq-countdown { margin-left: auto; font-weight: 500; font-variant-numeric: tabular-nums; font-size: 12px; color: #C0392B; }
-#pq-meter-row { font-size: 11px; color: #aaa; margin-top: -3px; }
+#pq-meter-row { font-size: 11px; color: #bbb; margin-top: -3px; }
 
-/* Queue */
+/* Queue list */
 #pq-queue-section { max-height: 180px; overflow-y: auto; }
 #pq-queue-list { display: flex; flex-direction: column; gap: 4px; }
 #pq-empty { text-align: center; padding: 12px 0; color: #bbb; font-size: 12px; line-height: 1.6; }
@@ -145,7 +146,7 @@
   background: none; border: none; cursor: pointer;
   color: #ccc; font-size: 12px; padding: 1px 3px; border-radius: 3px; font-family: inherit;
 }
-.pq-item-actions button:hover:not(:disabled) { background: rgba(0,0,0,0.06); color: #555; }
+.pq-item-actions button:hover:not(:disabled) { background: rgba(0,0,0,0.05); color: #555; }
 .pq-item-actions button:disabled { opacity: 0.2; cursor: default; }
 .pq-remove:hover { color: #C0392B !important; }
 .pq-item.pq-status-sending { border-color: #D85A30; }
@@ -157,7 +158,7 @@
 .pq-badge-done    { color: #639922; background: rgba(99,153,34,0.1); }
 .pq-badge-failed  { color: #C0392B; background: rgba(192,57,43,0.1); }
 
-/* Input */
+/* Input (fallback — main flow uses composer) */
 #pq-add-section { display: flex; flex-direction: column; gap: 5px; }
 #pq-input {
   width: 100%; font-family: inherit; font-size: 12px; color: #1a1a1a;
@@ -181,14 +182,13 @@
 #pq-fire-row { display: flex; gap: 5px; margin-top: 2px; }
 #pq-fire-btn {
   flex: 1; background: #D85A30; color: #fff; border: none;
-  border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 500;
-  cursor: pointer; font-family: inherit;
+  border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit;
 }
 #pq-fire-btn:hover:not(:disabled) { background: #b84d28; }
 #pq-fire-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 #pq-clear-btn {
   background: none; border: 1px solid rgba(0,0,0,0.1); border-radius: 6px;
-  padding: 6px 9px; font-size: 12px; color: #888; cursor: pointer; font-family: inherit;
+  padding: 6px 9px; font-size: 12px; color: #777; cursor: pointer; font-family: inherit;
 }
 #pq-clear-btn:hover { background: rgba(0,0,0,0.04); }
 
@@ -196,25 +196,24 @@
 #pq-queue-section::-webkit-scrollbar { width: 3px; }
 #pq-queue-section::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 2px; }
 
-/* ── + Queue button — sits left of the send arrow ───────────────────────── */
+/* ── + Queue button ──────────────────────────────────────────────────────── */
 #pq-queue-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   height: 32px;
-  padding: 0 12px;
+  padding: 0 14px;
   margin-right: 6px;
-  background: #1a1a1a;
+  background: #2a2a2a;
   color: #fff;
   border: none;
   border-radius: 8px;
-  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.1s, opacity 0.1s;
-  vertical-align: middle;
+  transition: background 0.1s;
 }
-#pq-queue-btn:hover { background: #333; }
-#pq-queue-btn:active { opacity: 0.75; }
+#pq-queue-btn:hover { background: #444; }
+#pq-queue-btn:active { background: #555; }
