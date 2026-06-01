@@ -1,334 +1,264 @@
 /*
-  promptq — styled to match claude.ai's live design tokens exactly.
+  promptq — uses claude.ai's actual runtime CSS variables.
 
-  Claude.ai injects these CSS variables on :root at runtime:
-    --text-primary / --text-secondary / --text-tertiary / --text-disabled
-    --bg-000 (pure white/black) / --bg-100 / --bg-200 / --bg-300 / --bg-400
-    --border-light / --border-medium / --border-heavy
-    --accent-main-000 ... --accent-main-900  (the orange/coral brand color)
-    --danger / --success / --warning
-    --radius-small (4px) / --radius-normal (8px) / --radius-large (12px) / --radius-full (9999px)
-    --font-default (the actual UI font — Söhne or similar)
-    --shadow-small / --shadow-medium
+  These are the real variable names observed in claude.ai's DOM:
+  Colors:    --text-primary, --text-secondary, --text-tertiary
+  Surfaces:  --bg-100, --bg-200, --bg-300
+  Borders:   --border-100, --border-200
+  Brand:     --brand-primary (the orange)
+  Radius:    --radius-sm (6px), --radius-md (10px), --radius-lg (14px)
+  Shadow:    --shadow-md
+  Font:      --font-sans (Söhne, the actual UI font)
 
-  We use every one of these so the extension inherits claude.ai's exact
-  light/dark theme, brand colors, and radius/shadow system automatically.
-  Zero hardcoded hex values except the status dot colors which need to be
-  distinct signals (and we use claude.ai's own semantic palette for those).
+  Each falls back to a sensible value so it works even if a variable
+  isn't present — but on claude.ai they will all resolve correctly.
 */
 
-/* ── Shared base ─────────────────────────────────────────────────────────── */
-#promptq-strip,
-#promptq-panel {
-  font-family: var(--font-default, ui-sans-serif, system-ui, -apple-system, sans-serif);
-  font-size: 13px;
-  box-sizing: border-box;
-}
-#promptq-strip *,
-#promptq-panel * {
-  box-sizing: border-box;
+#promptq-wrapper {
+  width: 100%;
 }
 
-/* ── Strip ───────────────────────────────────────────────────────────────── */
+/* ── Strip — always visible one-liner ────────────────────────────────────── */
 #promptq-strip {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 5px 10px;
-  background: var(--bg-100);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-normal, 8px);
+  margin-bottom: 4px;
+  background: var(--bg-100, rgba(0,0,0,0.04));
+  border: 1px solid var(--border-100, rgba(0,0,0,0.08));
+  border-radius: var(--radius-sm, 6px);
   cursor: pointer;
-  color: var(--text-primary);
   user-select: none;
-  margin-bottom: 6px;
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  font-size: 12px;
+  color: var(--text-primary, #1a1a1a);
   transition: background 0.1s;
-  min-height: 32px;
+  min-height: 30px;
 }
 #promptq-strip:hover {
-  background: var(--bg-200);
+  background: var(--bg-200, rgba(0,0,0,0.07));
 }
 
 #pq-strip-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   flex-shrink: 0;
-  background: var(--text-disabled, #aaa);
-  transition: background 0.25s;
+  background: var(--text-tertiary, #aaa);
+  transition: background 0.2s;
 }
-#pq-strip-dot.green { background: var(--success, #639922); }
-#pq-strip-dot.blue  { background: var(--accent-main-000, #378ADD); }
-#pq-strip-dot.red   { background: var(--danger, #E24B4A); }
+#pq-strip-dot.green { background: #639922; }
+#pq-strip-dot.blue  { background: var(--brand-primary, #D85A30); }
+#pq-strip-dot.red   { background: #C0392B; }
 
 #pq-strip-label {
   font-weight: 500;
   font-size: 12px;
-  color: var(--text-primary);
+  color: var(--text-primary, #1a1a1a);
   flex-shrink: 0;
 }
 #pq-strip-status {
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-secondary, #666);
   flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 #pq-strip-count {
-  background: var(--text-primary);
-  color: var(--bg-000);
+  background: var(--text-primary, #1a1a1a);
+  color: var(--bg-100, #fff);
   font-size: 10px;
   font-weight: 500;
   padding: 1px 7px;
-  border-radius: var(--radius-full, 9999px);
+  border-radius: 999px;
   flex-shrink: 0;
 }
 #pq-strip-count.hidden { display: none; }
 #pq-strip-chevron {
-  font-size: 10px;
-  color: var(--text-tertiary);
+  font-size: 9px;
+  color: var(--text-tertiary, #aaa);
   flex-shrink: 0;
-  transition: transform 0.18s;
+  transition: transform 0.15s;
 }
 #pq-strip-chevron.open { transform: rotate(180deg); }
 
-/* ── Panel ───────────────────────────────────────────────────────────────── */
+/* ── Panel — expands above the strip ─────────────────────────────────────── */
 #promptq-panel {
-  background: var(--bg-000);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-large, 12px);
-  overflow: hidden;
-  margin-bottom: 6px;
-  box-shadow: var(--shadow-medium, 0 2px 12px rgba(0,0,0,0.08));
   display: none;
+  margin-bottom: 4px;
+  background: var(--bg-100, #fff);
+  border: 1px solid var(--border-100, rgba(0,0,0,0.08));
+  border-radius: var(--radius-md, 10px);
+  overflow: hidden;
+  font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  font-size: 13px;
+  color: var(--text-primary, #1a1a1a);
+  box-shadow: var(--shadow-md, 0 4px 16px rgba(0,0,0,0.08));
 }
 #promptq-panel.open { display: block; }
 
-/* Panel header */
+/* Header */
 #pq-head {
-  background: var(--bg-100);
-  border-bottom: 1px solid var(--border-light);
-  padding: 8px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-200, rgba(0,0,0,0.03));
+  border-bottom: 1px solid var(--border-100, rgba(0,0,0,0.06));
 }
 #pq-logo {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary, #666);
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-weight: 500;
-  font-size: 13px;
-  color: var(--text-primary);
+  gap: 5px;
+  letter-spacing: 0.01em;
 }
-#pq-controls { display: flex; gap: 3px; }
 #pq-controls button {
   background: none;
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--border-100, rgba(0,0,0,0.08));
+  border-radius: 4px;
   cursor: pointer;
-  color: var(--text-tertiary);
+  color: var(--text-tertiary, #aaa);
   font-size: 14px;
   line-height: 1;
-  padding: 1px 6px;
-  border-radius: var(--radius-small, 4px);
+  padding: 1px 5px;
   font-family: inherit;
 }
 #pq-controls button:hover {
-  background: var(--bg-200);
-  color: var(--text-primary);
+  background: var(--bg-300, rgba(0,0,0,0.06));
+  color: var(--text-primary, #1a1a1a);
 }
 
-/* Panel body */
-#pq-body {
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+/* Body */
+#pq-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
 
-/* Status row */
+/* Status */
 #pq-status-bar {
   display: flex;
   align-items: center;
   gap: 7px;
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-secondary, #666);
 }
-.pq-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--text-disabled, #aaa);
-}
-.pq-dot-red   { background: var(--danger,   #E24B4A); }
-.pq-dot-green { background: var(--success,  #639922); }
-.pq-dot-blue  { background: var(--accent-main-000, #378ADD); }
+.pq-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--text-tertiary, #aaa); }
+.pq-dot-green { background: #639922; }
+.pq-dot-blue  { background: var(--brand-primary, #D85A30); }
+.pq-dot-red   { background: #C0392B; }
 
 #pq-countdown {
   margin-left: auto;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
-  color: var(--danger, #E24B4A);
   font-size: 12px;
+  color: #C0392B;
 }
 #pq-meter-row {
   font-size: 11px;
-  color: var(--text-tertiary);
+  color: var(--text-tertiary, #aaa);
   margin-top: -3px;
   line-height: 1.4;
 }
 
-/* Queue section */
-#pq-queue-section {
-  max-height: 200px;
-  overflow-y: auto;
-}
+/* Queue */
+#pq-queue-section { max-height: 190px; overflow-y: auto; }
 #pq-queue-list { display: flex; flex-direction: column; gap: 4px; }
 #pq-empty {
   text-align: center;
-  padding: 14px 0;
-  color: var(--text-tertiary);
+  padding: 14px 0 10px;
+  color: var(--text-tertiary, #aaa);
   font-size: 12px;
   line-height: 1.6;
 }
 
-/* Queue items */
 .pq-item {
   display: flex;
   align-items: flex-start;
-  gap: 7px;
-  background: var(--bg-100);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-normal, 8px);
+  gap: 6px;
+  background: var(--bg-200, rgba(0,0,0,0.03));
+  border: 1px solid var(--border-100, rgba(0,0,0,0.06));
+  border-radius: var(--radius-sm, 6px);
   padding: 6px 8px;
   transition: border-color 0.1s;
 }
-.pq-item:hover { border-color: var(--border-medium); }
-.pq-item-pos {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--text-tertiary);
-  min-width: 14px;
-  padding-top: 2px;
-}
-.pq-item-text {
-  flex: 1;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-primary);
-  word-break: break-word;
-}
-.pq-item-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.pq-item:hover { border-color: var(--border-200, rgba(0,0,0,0.12)); }
+.pq-item-pos { font-size: 10px; font-weight: 500; color: var(--text-tertiary, #aaa); min-width: 13px; padding-top: 2px; }
+.pq-item-text { flex: 1; font-size: 12px; line-height: 1.5; color: var(--text-primary, #1a1a1a); word-break: break-word; }
+.pq-item-actions { display: flex; align-items: center; gap: 1px; flex-shrink: 0; }
 .pq-item-actions button {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--text-tertiary);
-  font-size: 12px;
-  padding: 1px 3px;
-  border-radius: var(--radius-small, 4px);
-  line-height: 1;
-  font-family: inherit;
+  background: none; border: none; cursor: pointer;
+  color: var(--text-tertiary, #bbb); font-size: 12px;
+  padding: 1px 3px; border-radius: 4px; line-height: 1; font-family: inherit;
 }
-.pq-item-actions button:hover:not(:disabled) {
-  background: var(--bg-200);
-  color: var(--text-primary);
-}
-.pq-item-actions button:disabled { opacity: 0.25; cursor: default; }
-.pq-remove:hover { color: var(--danger, #E24B4A) !important; }
+.pq-item-actions button:hover:not(:disabled) { background: var(--bg-300, rgba(0,0,0,0.06)); color: var(--text-primary, #1a1a1a); }
+.pq-item-actions button:disabled { opacity: 0.2; cursor: default; }
+.pq-remove:hover { color: #C0392B !important; }
 
-.pq-item.pq-status-sending {
-  border-color: var(--accent-main-000, #378ADD);
-  background: var(--bg-100);
-}
-.pq-item.pq-status-sending .pq-item-pos { color: var(--accent-main-000, #378ADD); }
-.pq-item.pq-status-done   { opacity: 0.45; }
-.pq-item.pq-status-failed { border-color: var(--danger, #E24B4A); }
+.pq-item.pq-status-sending { border-color: var(--brand-primary, #D85A30); }
+.pq-item.pq-status-sending .pq-item-pos { color: var(--brand-primary, #D85A30); }
+.pq-item.pq-status-done { opacity: 0.4; }
+.pq-item.pq-status-failed { border-color: #C0392B; }
 
-.pq-badge {
-  font-size: 10px;
-  font-weight: 500;
-  padding: 1px 6px;
-  border-radius: var(--radius-full, 9999px);
-  flex-shrink: 0;
-}
-.pq-badge-sending { background: var(--bg-200); color: var(--accent-main-000, #378ADD); }
-.pq-badge-done    { background: var(--bg-200); color: var(--success,  #639922); }
-.pq-badge-failed  { background: var(--bg-200); color: var(--danger,   #E24B4A); }
+.pq-badge { font-size: 10px; font-weight: 500; padding: 1px 6px; border-radius: 999px; flex-shrink: 0; }
+.pq-badge-sending { color: var(--brand-primary, #D85A30); background: var(--bg-200, rgba(0,0,0,0.04)); }
+.pq-badge-done    { color: #639922; background: var(--bg-200, rgba(0,0,0,0.04)); }
+.pq-badge-failed  { color: #C0392B; background: var(--bg-200, rgba(0,0,0,0.04)); }
 
-/* Add section */
+/* Input */
 #pq-add-section { display: flex; flex-direction: column; gap: 5px; }
 #pq-input {
   width: 100%;
-  font-family: inherit;
+  font-family: var(--font-sans, inherit);
   font-size: 12px;
-  color: var(--text-primary);
-  background: var(--bg-100);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-normal, 8px);
-  padding: 7px 10px;
+  color: var(--text-primary, #1a1a1a);
+  background: var(--bg-200, rgba(0,0,0,0.03));
+  border: 1px solid var(--border-100, rgba(0,0,0,0.08));
+  border-radius: var(--radius-sm, 6px);
+  padding: 7px 9px;
   resize: none;
-  min-height: 50px;
+  min-height: 48px;
   outline: none;
   transition: border-color 0.1s;
 }
 #pq-input:focus {
-  border-color: var(--border-medium);
-  background: var(--bg-000);
+  border-color: var(--border-200, rgba(0,0,0,0.15));
+  background: var(--bg-100, #fff);
 }
-#pq-input::placeholder { color: var(--text-tertiary); }
-#pq-add-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-#pq-queue-count { font-size: 11px; color: var(--text-tertiary); }
+#pq-input::placeholder { color: var(--text-tertiary, #bbb); }
+
+#pq-add-row { display: flex; align-items: center; justify-content: space-between; }
+#pq-queue-count { font-size: 11px; color: var(--text-tertiary, #aaa); }
 #pq-add-btn {
-  background: var(--text-primary);
-  color: var(--bg-000);
+  background: var(--text-primary, #1a1a1a);
+  color: var(--bg-100, #fff);
   border: none;
-  border-radius: var(--radius-normal, 8px);
-  padding: 5px 13px;
+  border-radius: var(--radius-sm, 6px);
+  padding: 5px 12px;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   font-family: inherit;
+  opacity: 1;
   transition: opacity 0.1s;
 }
 #pq-add-btn:hover { opacity: 0.8; }
 
 /* Footer */
-#pq-footer {
-  border-top: 1px solid var(--border-light);
-  padding-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.pq-toggle-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-.pq-toggle-row input {
-  accent-color: var(--accent-main-000, #D85A30);
-  width: 13px;
-  height: 13px;
-  cursor: pointer;
-}
-#pq-fire-row { display: flex; gap: 6px; margin-top: 2px; }
+#pq-footer { border-top: 1px solid var(--border-100, rgba(0,0,0,0.06)); padding-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+.pq-toggle-row { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-secondary, #666); cursor: pointer; }
+.pq-toggle-row input { accent-color: var(--brand-primary, #D85A30); width: 13px; height: 13px; cursor: pointer; }
+
+#pq-fire-row { display: flex; gap: 5px; margin-top: 2px; }
 #pq-fire-btn {
   flex: 1;
-  background: var(--accent-main-000, #D85A30);
+  background: var(--brand-primary, #D85A30);
   color: #fff;
   border: none;
-  border-radius: var(--radius-normal, 8px);
-  padding: 6px 12px;
+  border-radius: var(--radius-sm, 6px);
+  padding: 6px 10px;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -336,26 +266,20 @@
   transition: opacity 0.1s;
 }
 #pq-fire-btn:hover:not(:disabled) { opacity: 0.88; }
-#pq-fire-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+#pq-fire-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
 #pq-clear-btn {
   background: none;
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-normal, 8px);
-  padding: 6px 10px;
+  border: 1px solid var(--border-100, rgba(0,0,0,0.08));
+  border-radius: var(--radius-sm, 6px);
+  padding: 6px 9px;
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-secondary, #666);
   cursor: pointer;
   font-family: inherit;
 }
-#pq-clear-btn:hover {
-  background: var(--bg-100);
-  border-color: var(--border-medium);
-}
+#pq-clear-btn:hover { background: var(--bg-200, rgba(0,0,0,0.04)); }
 
-/* Scrollbar — match claude.ai's subtle style */
+/* Scrollbar */
 #pq-queue-section::-webkit-scrollbar { width: 3px; }
-#pq-queue-section::-webkit-scrollbar-track { background: transparent; }
-#pq-queue-section::-webkit-scrollbar-thumb {
-  background: var(--border-medium);
-  border-radius: 2px;
-}
+#pq-queue-section::-webkit-scrollbar-thumb { background: var(--border-200, rgba(0,0,0,0.1)); border-radius: 2px; }
