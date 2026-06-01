@@ -182,9 +182,15 @@
     if (loopRunning) return;
     loopRunning = true;
     try {
-      const { sessionReset, weeklyReset } = parseMeterBar();
-      if (sessionReset) state.sessionReset = sessionReset;
-      if (weeklyReset)  state.weeklyReset  = weeklyReset;
+      // parseMeterBar does a full TreeWalker scan — only run it every 5s,
+      // not on every attribute-change tick (which fires hundreds of times/sec)
+      const now = Date.now();
+      if (!tick.lastMeterScan || now - tick.lastMeterScan > 5000) {
+        tick.lastMeterScan = now;
+        const { sessionReset, weeklyReset } = parseMeterBar();
+        if (sessionReset) state.sessionReset = sessionReset;
+        if (weeklyReset)  state.weeklyReset  = weeklyReset;
+      }
 
       const limited   = isHardLimited();
       const streaming = isStreaming();
@@ -625,17 +631,56 @@
   });
 
   // ─── Observer ────────────────────────────────────────────────────────────────
+  // ─── Debounced observer ──────────────────────────────────────────────────────
+  // The naive approach (call tick() on every mutation) freezes claude.ai because
+  // React fires hundreds of mutations per second. We debounce to 150ms so the
+  // main thread stays free, and only do the expensive TreeWalker scan on the
+  // 5s poll — not on every DOM change.
+
+  let tickDebounceTimer = null;
+
+  function scheduleTick(urgent = false) {
+    if (tickDebounceTimer) return; // already scheduled
+    tickDebounceTimer = setTimeout(() => {
+      tickDebounceTimer = null;
+      tick();
+    }, urgent ? 0 : 150);
+  }
+
   function startObserver() {
     if (observerStarted) return;
     observerStarted = true;
-    new MutationObserver(() => {
+
+    // Watch only the attributes we care about — NOT subtree childList
+    // (childList subtree is the performance killer on React apps)
+    new MutationObserver((mutations) => {
+      // Inject UI if not done yet — cheap check
       if (!uiInjected) injectUI();
-      tick();
+
+      // Only schedule a tick if a relevant attribute actually changed
+      for (const m of mutations) {
+        if (m.type === 'attributes') {
+          scheduleTick(false);
+          return;
+        }
+      }
     }).observe(document.body, {
-      childList: true, subtree: true, attributes: true,
+      subtree: true,
+      attributes: true,
       attributeFilter: ['aria-label', 'disabled', 'data-is-streaming'],
     });
-    setInterval(tick, 5000);
+
+    // Separate observer just for initial injection — watches childList
+    // but disconnects once UI is injected so it doesn't run forever
+    const injectObserver = new MutationObserver(() => {
+      if (uiInjected) { injectObserver.disconnect(); return; }
+      injectUI();
+    });
+    injectObserver.observe(document.body, { childList: true, subtree: true });
+
+    // Poll every 5s for rate limit text + meter bar (TreeWalker scan)
+    // This is intentionally infrequent — it's the expensive operation
+    setInterval(() => tick(), 5000);
   }
 
   // ─── Init ─────────────────────────────────────────────────────────────────────
@@ -651,3 +696,4 @@
     init();
   }
 })();
+
