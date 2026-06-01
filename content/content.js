@@ -249,8 +249,7 @@
 
       // Inject UI as soon as composer is in DOM
       if (!uiInjected) injectUI();
-      // Retry queue button separately — send button may load after UI injection
-      if (uiInjected && !queueBtnInjected) injectQueueButton();
+
 
       if (limited) {
         if (machineState !== 'LIMITED') {
@@ -411,34 +410,6 @@
     }
   }
 
-  // ─── Queue button — injected next to the send button ────────────────────────
-  let queueBtnInjected = false;
-
-  function injectQueueButton() {
-    if (queueBtnInjected) return;
-    const sendBtn = getSendButton() || getStopButton();
-    if (!sendBtn) return;
-
-    const btn = document.createElement('button');
-    btn.id = 'pq-queue-btn';
-    btn.textContent = '+ Queue';
-    btn.title = 'Add to promptq queue (instead of sending now)';
-    // Use mousedown — fires before React's synthetic click handlers
-    // Don't stopPropagation or React's input blur won't fire first
-    btn.addEventListener('mousedown', (e) => {
-      e.preventDefault(); // prevent focus loss from composer
-    });
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      addPrompt();
-    });
-
-    // Insert right before the send button
-    sendBtn.parentElement.insertBefore(btn, sendBtn);
-    queueBtnInjected = true;
-    LOG('queue button injected');
-  }
-
   // ─── UI injection ─────────────────────────────────────────────────────────────
   function injectUI() {
     if (uiInjected) return;
@@ -533,9 +504,6 @@
     // This puts the strip naturally above the meter bar.
     anchor.parent.insertBefore(wrapper, anchor.composer);
     LOG('injected above composer');
-
-    // ── Inject "+ Queue" button next to the send button ──
-    injectQueueButton();
 
     // ── Wire events ──
     strip.addEventListener('click', togglePanel);
@@ -834,6 +802,7 @@
     init();
   }
 })();
+
 
 
 
