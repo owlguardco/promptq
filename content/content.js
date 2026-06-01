@@ -358,6 +358,30 @@
     }
   }
 
+  // ─── Queue button — injected next to the send button ────────────────────────
+  let queueBtnInjected = false;
+
+  function injectQueueButton() {
+    if (queueBtnInjected) return;
+    const sendBtn = getSendButton() || getStopButton();
+    if (!sendBtn) return;
+
+    const btn = document.createElement('button');
+    btn.id = 'pq-queue-btn';
+    btn.textContent = '+ Queue';
+    btn.title = 'Add to promptq queue (instead of sending now)';
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      addPrompt();
+    });
+
+    // Insert right before the send button
+    sendBtn.parentElement.insertBefore(btn, sendBtn);
+    queueBtnInjected = true;
+    LOG('queue button injected');
+  }
+
   // ─── UI injection ─────────────────────────────────────────────────────────────
   function injectUI() {
     if (uiInjected) return;
@@ -461,6 +485,9 @@
       anchor.parent.insertBefore(wrapper, anchor.composer);
       LOG('injected before composer (fallback)');
     }
+
+    // ── Inject "+ Queue" button next to the send button ──
+    injectQueueButton();
 
     // ── Wire events ──
     strip.addEventListener('click', togglePanel);
@@ -574,14 +601,34 @@
 
   // ─── Queue list ───────────────────────────────────────────────────────────────
   function addPrompt() {
-    const input = document.getElementById('pq-input');
-    const text  = (input?.value || '').trim();
+    // Read from the main claude.ai composer, not a separate textarea
+    const editable = document.querySelector('div[contenteditable="true"], [role="textbox"]');
+    const ta       = document.querySelector('textarea');
+    let text = '';
+
+    if (editable) {
+      text = editable.innerText.trim();
+      if (text) {
+        // Clear the composer
+        editable.focus();
+        document.execCommand('selectAll', false, null);
+        document.execCommand('delete', false, null);
+        editable.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    } else if (ta) {
+      text = ta.value.trim();
+      if (text) {
+        const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
+        if (setter) { setter.call(ta, ''); ta.dispatchEvent(new Event('input', { bubbles: true })); }
+      }
+    }
+
     if (!text) return;
     state.queue.push({ id: Date.now(), text, status: 'pending' });
-    input.value = '';
     saveState();
     renderQueueList();
     if (!panelOpen) openPanel();
+    LOG('queued:', text.slice(0, 50));
   }
 
   function renderQueueList() {
@@ -726,6 +773,7 @@
     init();
   }
 })();
+
 
 
 
