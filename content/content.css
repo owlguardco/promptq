@@ -1,17 +1,19 @@
-/* promptq — theme driven by data-pq-theme="light|dark" set by JS */
+/* promptq — theme set via data-pq-theme="light|dark" on wrapper + panel */
 
+/* ── Wrapper ─────────────────────────────────────────────────────────────── */
 #promptq-wrapper {
   position: relative;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  flex-shrink: 0;
+  width: 100%;
+  margin: 2px 0;
 }
 
-/* ── Strip — styled to blend with claude.ai toolbar buttons ─────────────── */
+/* ── Strip ───────────────────────────────────────────────────────────────── */
 #promptq-strip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   padding: 3px 10px;
   border-radius: 5px;
   cursor: pointer;
@@ -20,28 +22,25 @@
   font-size: 11px;
   font-weight: 500;
   white-space: nowrap;
-  height: 26px;
-  margin-left: 4px;
+  height: 24px;
   transition: background 0.1s;
+  /* light mode */
   background: transparent;
-  border: 1px solid transparent;
-  color: #555;
+  border: 1px solid rgba(0,0,0,0.12);
+  color: #444;
 }
 #promptq-strip:hover {
-  background: rgba(0,0,0,0.06);
-  border-color: rgba(0,0,0,0.08);
+  background: rgba(0,0,0,0.05);
   color: #1a1a1a;
 }
-
-/* dark strip */
+/* dark mode strip */
 #promptq-wrapper[data-pq-theme="dark"] #promptq-strip {
-  color: #aaa;
+  border-color: rgba(255,255,255,0.15);
+  color: #ccc;
   background: transparent;
-  border-color: transparent;
 }
 #promptq-wrapper[data-pq-theme="dark"] #promptq-strip:hover {
-  background: rgba(255,255,255,0.08);
-  border-color: rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.07);
   color: #f0f0f0;
 }
 
@@ -55,32 +54,32 @@
 
 #pq-strip-label { font-weight: 600; font-size: 11px; }
 #pq-strip-status {
-  font-size: 11px; color: rgba(0,0,0,0.45);
-  max-width: 130px; overflow: hidden; text-overflow: ellipsis;
+  font-size: 11px;
+  color: rgba(0,0,0,0.4);
+  max-width: 140px; overflow: hidden; text-overflow: ellipsis;
 }
-#promptq-wrapper[data-pq-theme="dark"] #pq-strip-status {
-  color: rgba(255,255,255,0.45);
-}
+#promptq-wrapper[data-pq-theme="dark"] #pq-strip-status { color: rgba(255,255,255,0.4); }
 
 #pq-strip-count {
-  background: #D85A30; color: #fff; font-size: 10px; font-weight: 600;
-  padding: 1px 6px; border-radius: 999px; flex-shrink: 0;
+  background: #D85A30; color: #fff;
+  font-size: 10px; font-weight: 600;
+  padding: 0 5px; border-radius: 999px; flex-shrink: 0; min-width: 16px; text-align: center;
 }
 #pq-strip-count.hidden { display: none; }
 #pq-strip-chevron {
-  font-size: 9px; color: rgba(0,0,0,0.3); flex-shrink: 0; transition: transform 0.15s;
+  font-size: 9px; color: rgba(0,0,0,0.25); flex-shrink: 0; transition: transform 0.15s;
 }
-#promptq-wrapper[data-pq-theme="dark"] #pq-strip-chevron { color: rgba(255,255,255,0.3); }
+#promptq-wrapper[data-pq-theme="dark"] #pq-strip-chevron { color: rgba(255,255,255,0.25); }
 #pq-strip-chevron.open { transform: rotate(180deg); }
 
 /* ── Panel ───────────────────────────────────────────────────────────────── */
 #promptq-panel {
   display: none;
   position: absolute;
-  bottom: calc(100% + 36px);
+  bottom: calc(100% + 6px);
   left: 0;
-  width: 320px;
-  border-radius: 12px;
+  width: 300px;
+  border-radius: 10px;
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 13px;
@@ -89,21 +88,21 @@
   background: #ffffff;
   border: 1px solid rgba(0,0,0,0.12);
   color: #1a1a1a;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.14), 0 2px 8px rgba(0,0,0,0.06);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.06);
 }
 #promptq-panel.open { display: block; }
 
 /* dark panel */
 #promptq-panel[data-pq-theme="dark"] {
   background: #1e1e1e;
-  border-color: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.1);
   color: #f0f0f0;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
 }
 
 /* Header */
 #pq-head {
-  padding: 9px 13px;
+  padding: 8px 12px;
   display: flex; align-items: center; justify-content: space-between;
   background: #f5f4f1;
   border-bottom: 1px solid rgba(0,0,0,0.07);
@@ -115,15 +114,12 @@
 #pq-logo { font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 5px; color: inherit; }
 #pq-controls button {
   background: none; border: 1px solid rgba(0,0,0,0.1); border-radius: 4px;
-  cursor: pointer; color: #999; font-size: 14px; line-height: 1; padding: 1px 6px; font-family: inherit;
+  cursor: pointer; color: #999; font-size: 14px; line-height: 1;
+  padding: 1px 6px; font-family: inherit;
 }
-#promptq-panel[data-pq-theme="dark"] #pq-controls button {
-  border-color: rgba(255,255,255,0.1); color: #666;
-}
+#promptq-panel[data-pq-theme="dark"] #pq-controls button { border-color: rgba(255,255,255,0.1); color: #666; }
 #pq-controls button:hover { background: rgba(0,0,0,0.05); color: #333; }
-#promptq-panel[data-pq-theme="dark"] #pq-controls button:hover {
-  background: rgba(255,255,255,0.07); color: #ccc;
-}
+#promptq-panel[data-pq-theme="dark"] #pq-controls button:hover { background: rgba(255,255,255,0.07); color: #ccc; }
 
 /* Body */
 #pq-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
@@ -148,12 +144,9 @@
 .pq-item {
   display: flex; align-items: flex-start; gap: 6px;
   background: #f7f6f3; border: 1px solid rgba(0,0,0,0.07);
-  border-radius: 7px; padding: 6px 8px;
+  border-radius: 6px; padding: 6px 8px;
 }
-#promptq-panel[data-pq-theme="dark"] .pq-item {
-  background: #2a2a2a; border-color: rgba(255,255,255,0.07);
-}
-.pq-item:hover { border-color: rgba(0,0,0,0.13); }
+#promptq-panel[data-pq-theme="dark"] .pq-item { background: #2a2a2a; border-color: rgba(255,255,255,0.07); }
 .pq-item-pos { font-size: 10px; font-weight: 500; color: #bbb; min-width: 13px; padding-top: 2px; }
 .pq-item-text { flex: 1; font-size: 12px; line-height: 1.5; color: #1a1a1a; word-break: break-word; }
 #promptq-panel[data-pq-theme="dark"] .pq-item-text { color: #e0e0e0; }
@@ -179,15 +172,11 @@
 #pq-input {
   width: 100%; font-family: inherit; font-size: 12px; color: #1a1a1a;
   background: #f7f6f3; border: 1px solid rgba(0,0,0,0.1);
-  border-radius: 7px; padding: 7px 9px; resize: none; min-height: 52px; outline: none;
+  border-radius: 6px; padding: 7px 9px; resize: none; min-height: 48px; outline: none;
 }
-#promptq-panel[data-pq-theme="dark"] #pq-input {
-  background: #2a2a2a; border-color: rgba(255,255,255,0.1); color: #f0f0f0;
-}
+#promptq-panel[data-pq-theme="dark"] #pq-input { background: #2a2a2a; border-color: rgba(255,255,255,0.1); color: #f0f0f0; }
 #pq-input:focus { border-color: rgba(0,0,0,0.2); background: #fff; }
-#promptq-panel[data-pq-theme="dark"] #pq-input:focus {
-  background: #333; border-color: rgba(255,255,255,0.2);
-}
+#promptq-panel[data-pq-theme="dark"] #pq-input:focus { background: #333; border-color: rgba(255,255,255,0.2); }
 #pq-input::placeholder { color: #bbb; }
 #promptq-panel[data-pq-theme="dark"] #pq-input::placeholder { color: #555; }
 
@@ -195,7 +184,7 @@
 #pq-queue-count { font-size: 11px; color: #bbb; }
 #promptq-panel[data-pq-theme="dark"] #pq-queue-count { color: #555; }
 #pq-add-btn {
-  background: #1a1a1a; color: #fff; border: none; border-radius: 6px;
+  background: #1a1a1a; color: #fff; border: none; border-radius: 5px;
   padding: 5px 12px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit;
 }
 #promptq-panel[data-pq-theme="dark"] #pq-add-btn { background: #f0f0f0; color: #1a1a1a; }
@@ -210,12 +199,12 @@
 #pq-fire-row { display: flex; gap: 5px; margin-top: 2px; }
 #pq-fire-btn {
   flex: 1; background: #D85A30; color: #fff; border: none;
-  border-radius: 6px; padding: 6px 10px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit;
+  border-radius: 5px; padding: 6px 10px; font-size: 12px; font-weight: 500; cursor: pointer; font-family: inherit;
 }
 #pq-fire-btn:hover:not(:disabled) { background: #b84d28; }
 #pq-fire-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 #pq-clear-btn {
-  background: none; border: 1px solid rgba(0,0,0,0.1); border-radius: 6px;
+  background: none; border: 1px solid rgba(0,0,0,0.1); border-radius: 5px;
   padding: 6px 9px; font-size: 12px; color: #777; cursor: pointer; font-family: inherit;
 }
 #promptq-panel[data-pq-theme="dark"] #pq-clear-btn { border-color: rgba(255,255,255,0.1); color: #888; }
@@ -228,23 +217,14 @@
 /* ── + Queue button ──────────────────────────────────────────────────────── */
 #pq-queue-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  height: 28px; padding: 0 12px; margin-right: 6px;
-  background: rgba(0,0,0,0.07);
-  color: #1a1a1a;
-  border: 1px solid rgba(0,0,0,0.1);
-  border-radius: 7px;
+  height: 24px; padding: 0 10px;
+  background: transparent;
+  color: #444;
+  border: 1px solid rgba(0,0,0,0.12);
+  border-radius: 5px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 11px; font-weight: 500; cursor: pointer; white-space: nowrap;
   transition: background 0.1s;
+  margin-left: 4px;
 }
-#pq-queue-btn:hover { background: rgba(0,0,0,0.12); }
-
-/* dark queue button — detected via wrapper theme */
-#promptq-wrapper[data-pq-theme="dark"] ~ * #pq-queue-btn,
-body.dark #pq-queue-btn,
-html.dark #pq-queue-btn {
-  background: rgba(255,255,255,0.1);
-  color: #f0f0f0;
-  border-color: rgba(255,255,255,0.14);
-}
-
+#pq-queue-btn:hover { background: rgba(0,0,0,0.05); color: #1a1a1a; }
