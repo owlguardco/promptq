@@ -569,6 +569,10 @@
             <button class="pq-move-up"   data-idx="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
             <button class="pq-move-down" data-idx="${i}" ${i === state.queue.length - 1 ? 'disabled' : ''}>↓</button>
             <button class="pq-remove"    data-idx="${i}">×</button>
+          ` : item.status === 'failed' ? `
+            <button class="pq-retry"  data-idx="${i}" title="Retry">↻</button>
+            <span class="pq-badge pq-badge-failed">failed</span>
+            <button class="pq-remove" data-idx="${i}">×</button>
           ` : `<span class="pq-badge pq-badge-${item.status}">${item.status}</span>`}
         </div>
       </div>
@@ -584,6 +588,13 @@
     }));
     list.querySelectorAll('.pq-remove').forEach(b => b.addEventListener('click', () => {
       state.queue.splice(+b.dataset.idx, 1); saveState(); renderQueueList();
+    }));
+    list.querySelectorAll('.pq-retry').forEach(b => b.addEventListener('click', () => {
+      const item = state.queue[+b.dataset.idx];
+      if (!item) return;
+      item.status = 'pending';          // re-queue; tick()/auto-fire will pick it up
+      saveState();
+      renderQueueList();
     }));
 
     updateStrip();
