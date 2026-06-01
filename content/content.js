@@ -27,16 +27,33 @@
   // Detect claude.ai's actual theme and apply it to our elements.
   // claude.ai sets class="dark" or data-theme="dark" on <html> or <body>.
   function isDarkMode() {
+    // claude.ai signals dark mode in multiple ways depending on build version.
+    // Check all of them, most specific first.
     const html = document.documentElement;
     const body = document.body;
-    return (
-      html.classList.contains('dark') ||
-      body.classList.contains('dark') ||
-      html.getAttribute('data-theme') === 'dark' ||
-      body.getAttribute('data-theme') === 'dark' ||
-      html.getAttribute('data-color-scheme') === 'dark' ||
-      window.matchMedia('(prefers-color-scheme: dark)').matches
-    );
+
+    // Check explicit dark class / attribute on root elements
+    if (html.classList.contains('dark')) return true;
+    if (body.classList.contains('dark')) return true;
+    if (html.getAttribute('data-theme') === 'dark') return true;
+    if (body.getAttribute('data-theme') === 'dark') return true;
+    if (html.getAttribute('data-color-scheme') === 'dark') return true;
+
+    // Check computed background color — dark mode has a dark background
+    // This is the most reliable signal since claude.ai always sets bg color
+    const bg = window.getComputedStyle(body).backgroundColor;
+    if (bg) {
+      // Parse rgb values
+      const m = bg.match(/\d+/g);
+      if (m && m.length >= 3) {
+        const [r, g, b] = m.map(Number);
+        // If luminance is low it's dark mode
+        const luminance = (0.299 * r + 0.587 * g + 0.114 * b);
+        if (luminance < 80) return true;
+      }
+    }
+
+    return false;
   }
 
   function applyTheme() {
@@ -512,37 +529,15 @@
       }
     }
 
-    // Find the toolbar row that holds the + button and attachment icons
-    // That's the row INSIDE the composer box at the bottom left
-    // Strategy: find the + button (aria-label contains "attach" or just a + text)
-    // then get its parent row
-    let toolbarRow = null;
-
-    // Look for the row containing the + button inside the composer
-    const allBtns = anchor.composer.querySelectorAll('button');
-    for (const btn of allBtns) {
-      const lbl = (btn.getAttribute('aria-label') || btn.textContent || '').trim();
-      if (lbl === '+' || lbl.toLowerCase().includes('attach') || lbl.toLowerCase().includes('add')) {
-        // This button's parent row is our target
-        toolbarRow = btn.closest('[class*="flex"], [class*="row"], div');
-        if (toolbarRow && toolbarRow !== anchor.composer) break;
-      }
-    }
-
-    if (toolbarRow) {
-      // Append our wrapper to the END of the toolbar row
-      // so it sits right after the existing + and icon buttons
-      toolbarRow.style.display = 'flex';
-      toolbarRow.style.alignItems = 'center';
-      toolbarRow.appendChild(wrapper);
-      LOG('injected into toolbar row');
-    } else if (meterRow) {
-      meterRow.style.display = 'flex';
-      meterRow.style.alignItems = 'center';
-      meterRow.style.gap = '8px';
-      meterRow.insertBefore(wrapper, meterRow.firstChild);
-      LOG('injected into meter row (fallback)');
+    // Clean injection: insert wrapper as a slim row BETWEEN the
+    // composer box and the meter bar. Never touch the toolbar buttons.
+    if (meterRow) {
+      // Insert before the meter row so our strip sits between
+      // the composer and the "Session: X% · resets in Xh" text
+      meterRow.parentElement.insertBefore(wrapper, meterRow);
+      LOG('injected above meter row');
     } else {
+      // Fallback: insert before the whole composer
       anchor.parent.insertBefore(wrapper, anchor.composer);
       LOG('injected before composer (fallback)');
     }
@@ -847,6 +842,7 @@
     init();
   }
 })();
+
 
 
 
