@@ -1,29 +1,26 @@
 (() => {
   'use strict';
 
-  // ─── Constants ────────────────────────────────────────────────────────────────
   const STATE_KEY = 'promptq_state';
-  const POLL_MS   = 500;   // how often we check button state
+  const POLL_MS   = 500;
   const LOG       = (...a) => console.log('[promptq]', ...a);
 
-  // ─── App state ────────────────────────────────────────────────────────────────
   let state = {
     queue: [],
     autoFire: true,
     waitForResponse: true,
     delayBetween: 800,
-    // runtime only (not persisted across page loads):
     limited: false,
     resetAt: null,
     sessionReset: null,
     weeklyReset: null,
   };
 
-  // ─── Machine state ────────────────────────────────────────────────────────────
   // IDLE | STREAMING | LIMITED | FIRING
-  let machineState = 'IDLE';
-  let panelInjected = false;
-  let observerStarted = false;
+  let machineState  = 'IDLE';
+  let uiInjected    = false;
+  let panelOpen     = false;
+  let observerStart = false;
 
   // ─── Persistence ──────────────────────────────────────────────────────────────
   function saveState() {
@@ -40,13 +37,8 @@
     });
   }
 
-  // ─── Submit button helpers ────────────────────────────────────────────────────
-  // The orange arrow button is the ground truth for "Claude is ready".
-  // When streaming: button shows stop icon, aria-label contains "Stop"/"Cancel".
-  // When ready:     button shows arrow, aria-label contains "Send", not disabled.
-
+  // ─── Submit button ────────────────────────────────────────────────────────────
   function getSendButton() {
-    // Specific selectors first
     for (const sel of [
       'button[aria-label="Send message"]',
       'button[aria-label="Send Message"]',
@@ -55,9 +47,8 @@
       const b = document.querySelector(sel);
       if (b) return b;
     }
-    // Broader: enabled buttons near the composer
-    const all = [...document.querySelectorAll('form button, [role="textbox"] ~ * button')];
-    return all.filter(b => !b.disabled).pop() || null;
+    return [...document.querySelectorAll('form button, [role="textbox"] ~ * button')]
+      .filter(b => !b.disabled).pop() || null;
   }
 
   function getStopButton() {
@@ -67,14 +58,12 @@
   }
 
   function isArrowReady() {
-    // Orange arrow visible and enabled → Claude is idle
-    if (getStopButton()) return false;                         // stop icon = still going
+    if (getStopButton()) return false;
     if (document.querySelector('[data-is-streaming="true"]')) return false;
     const btn = getSendButton();
     if (!btn || btn.disabled) return false;
     const lbl = (btn.getAttribute('aria-label') || '').toLowerCase();
-    if (lbl.includes('stop') || lbl.includes('cancel')) return false;
-    return true;
+    return !lbl.includes('stop') && !lbl.includes('cancel');
   }
 
   function isStreaming() {
@@ -84,10 +73,9 @@
     return !!(btn && btn.disabled);
   }
 
-  // Poll until the orange arrow is ready, or timeout.
   async function waitForArrow(maxMs = 10 * 60 * 1000) {
     const deadline = Date.now() + maxMs;
-    await sleep(1500); // give streaming a beat to start
+    await sleep(1500);
     while (Date.now() < deadline) {
       if (isArrowReady()) return true;
       await sleep(POLL_MS);
@@ -140,23 +128,38 @@
     return ['Usage limit reached', "You've reached your", 'Keep working'].some(p => body.includes(p));
   }
 
-  // ─── State machine transition ─────────────────────────────────────────────────
+  // ─── Find the composer container to dock into ─────────────────────────────────
+  // claude.ai's composer sits in a div that wraps the textarea/ProseMirror + bottom bar.
+  // We look for the outermost wrapper that contains the send button.
+  function findComposerContainer() {
+    const sendBtn = getSendButton() || getStopButton();
+    if (!sendBtn) return null;
+
+    // Walk up until we find a container that's wide enough to be the composer wrapper
+    let el = sendBtn.parentElement;
+    while (el && el !== document.body) {
+      const rect = el.getBoundingClientRect();
+      // The composer container spans most of the page width
+      if (rect.width > window.innerWidth * 0.4 && rect.height < window.innerHeight * 0.5) {
+        return el;
+      }
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  // ─── State machine ────────────────────────────────────────────────────────────
   function transition(next) {
     if (machineState === next) return;
     LOG(`${machineState} → ${next}`);
     machineState = next;
-    updatePanel();
+    updateUI();
   }
 
-  // ─── The main loop ────────────────────────────────────────────────────────────
-  // Called on every DOM mutation + every 5s poll.
-  // Determines which state we're in and kicks off firing if needed.
   let loopRunning = false;
-
   async function tick() {
     if (loopRunning) return;
     loopRunning = true;
-
     try {
       const { sessionReset, weeklyReset } = parseMeterBar();
       if (sessionReset) state.sessionReset = sessionReset;
@@ -166,14 +169,12 @@
       const streaming = isStreaming();
       const arrowUp   = isArrowReady();
 
-      // Show panel whenever we can see the meter bar (user can queue ahead of time)
-      if ((sessionReset || weeklyReset || limited) && !panelInjected) {
-        injectPanel();
+      // Inject UI whenever we can see the composer
+      if (!uiInjected && (sessionReset || weeklyReset || limited || getSendButton() || getStopButton())) {
+        injectUI();
       }
 
-      // ── Transitions ──────────────────────────────────────────────────────────
       if (limited) {
-        // Hard wall — tell background to set alarm for reset time
         if (machineState !== 'LIMITED') {
           const resetAt = sessionReset || weeklyReset || (Date.now() + 3600000);
           state.limited = true;
@@ -181,21 +182,12 @@
           chrome.runtime.sendMessage({ type: 'SET_ALARM', resetAt });
           transition('LIMITED');
         }
-
       } else if (streaming) {
-        if (machineState === 'LIMITED') {
-          // Limit just cleared and Claude is already responding
-          state.limited = false;
-          transition('STREAMING');
-        } else if (machineState !== 'STREAMING' && machineState !== 'FIRING') {
+        if (machineState !== 'STREAMING' && machineState !== 'FIRING') {
           transition('STREAMING');
         }
-
       } else if (arrowUp) {
-        if (machineState === 'LIMITED') {
-          // Limit lifted, arrow is up
-          state.limited = false;
-        }
+        if (machineState === 'LIMITED') state.limited = false;
         if (machineState !== 'FIRING') {
           const pending = state.queue.filter(q => q.status === 'pending');
           if (pending.length > 0 && state.autoFire) {
@@ -208,44 +200,32 @@
           }
         }
       }
-
-      updatePanel();
+      updateUI();
     } finally {
       loopRunning = false;
     }
   }
 
-  // ─── Firing logic ─────────────────────────────────────────────────────────────
+  // ─── Firing ───────────────────────────────────────────────────────────────────
   async function fireQueue() {
     const pending = state.queue.filter(q => q.status === 'pending');
-    if (pending.length === 0) { transition('IDLE'); return; }
-
-    LOG(`firing ${pending.length} queued prompts`);
+    if (!pending.length) { transition('IDLE'); return; }
+    LOG(`firing ${pending.length} prompts`);
 
     for (const item of pending) {
       item.status = 'sending';
-      saveState();
-      renderQueueList();
+      saveState(); renderQueueList();
 
       const ok = await submitPrompt(item.text);
-
       item.status = ok ? 'done' : 'failed';
-      saveState();
-      renderQueueList();
+      saveState(); renderQueueList();
 
-      if (!ok) {
-        LOG('submit failed, stopping queue');
-        break;
-      }
+      if (!ok) { LOG('submit failed, stopping'); break; }
 
-      // Wait for the arrow to come back (Claude finished responding)
       if (state.waitForResponse) {
         transition('STREAMING');
         const ready = await waitForArrow();
-        if (!ready) {
-          LOG('timed out waiting for arrow');
-          break;
-        }
+        if (!ready) { LOG('arrow timed out'); break; }
         transition('FIRING');
         await sleep(state.delayBetween);
       } else {
@@ -256,54 +236,34 @@
     const done = state.queue.filter(q => q.status === 'done').length;
     chrome.runtime.sendMessage({
       type: 'NOTIFY',
-      title: 'promptq — queue complete',
+      title: 'promptq — done',
       message: `${done} prompt${done !== 1 ? 's' : ''} fired.`,
     });
-
     transition('IDLE');
-    updatePanel();
     renderQueueList();
   }
 
-  // ─── Input injection ──────────────────────────────────────────────────────────
+  // ─── Submit ───────────────────────────────────────────────────────────────────
   async function submitPrompt(text) {
     try {
-      // Wait for arrow before doing anything
       if (!isArrowReady()) {
         const ready = await waitForArrow();
         if (!ready) return false;
       }
-
-      // ProseMirror contenteditable (current claude.ai)
       const editable = document.querySelector('div[contenteditable="true"], [role="textbox"]');
       if (editable) {
         editable.focus();
         await sleep(100);
-
-        // Clear + set text via execCommand (most compatible with ProseMirror)
-        editable.focus();
         document.execCommand('selectAll', false, null);
         document.execCommand('delete', false, null);
         await sleep(50);
         document.execCommand('insertText', false, text);
         await sleep(250);
-
-        // Click the send button
         const btn = getSendButton();
-        if (btn && !btn.disabled) {
-          btn.click();
-          LOG('sent via button click');
-          return true;
-        }
-
-        // Fallback: Enter key
-        editable.dispatchEvent(new KeyboardEvent('keydown', {
-          key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, cancelable: true
-        }));
+        if (btn && !btn.disabled) { btn.click(); return true; }
+        editable.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
         return true;
       }
-
-      // Textarea fallback
       const ta = document.querySelector('textarea');
       if (ta) {
         const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')?.set;
@@ -317,8 +277,6 @@
           return true;
         }
       }
-
-      LOG('no input element found');
       return false;
     } catch (err) {
       LOG('submitPrompt error:', err);
@@ -326,19 +284,28 @@
     }
   }
 
-  // ─── Panel UI ─────────────────────────────────────────────────────────────────
-  function injectPanel() {
-    if (panelInjected) return;
-    panelInjected = true;
+  // ─── UI injection ─────────────────────────────────────────────────────────────
+  // Injects two elements:
+  //   #promptq-panel  — the expandable queue panel (hidden by default)
+  //   #promptq-strip  — the always-visible docked strip
+  // Both are inserted BEFORE the composer box, so they sit above it.
 
+  function injectUI() {
+    if (uiInjected) return;
+
+    const container = findComposerContainer();
+    if (!container) return; // composer not ready yet
+
+    uiInjected = true;
+
+    // ── Panel ──
     const panel = document.createElement('div');
     panel.id = 'promptq-panel';
     panel.innerHTML = `
-      <div id="pq-header">
-        <div id="pq-logo"><span class="pq-icon">⏱</span><span id="pq-title">promptq</span></div>
+      <div id="pq-head">
+        <div id="pq-logo">⏱ promptq</div>
         <div id="pq-controls">
-          <button id="pq-minimize" title="Minimize">−</button>
-          <button id="pq-close" title="Close">×</button>
+          <button id="pq-close" title="Close panel">×</button>
         </div>
       </div>
       <div id="pq-body">
@@ -350,7 +317,7 @@
         <div id="pq-meter-row" style="display:none"></div>
         <div id="pq-queue-section">
           <div id="pq-queue-list"></div>
-          <div id="pq-empty">No prompts queued.<br>Add one below to keep your flow.</div>
+          <div id="pq-empty">No prompts queued yet.<br>Add one below to keep your flow.</div>
         </div>
         <div id="pq-add-section">
           <textarea id="pq-input" placeholder="What do you want to ask next? (Cmd+Enter to add)" rows="3"></textarea>
@@ -360,34 +327,43 @@
           </div>
         </div>
         <div id="pq-footer">
-          <label class="pq-toggle-row" title="Auto-fire queued prompts when Claude is ready">
+          <label class="pq-toggle-row">
             <input type="checkbox" id="pq-autofire" ${state.autoFire ? 'checked' : ''}>
             <span>Auto-fire when ready</span>
           </label>
-          <label class="pq-toggle-row" title="Wait for each response before sending the next prompt">
+          <label class="pq-toggle-row">
             <input type="checkbox" id="pq-wait" ${state.waitForResponse ? 'checked' : ''}>
             <span>Wait for response</span>
           </label>
           <div id="pq-fire-row">
-            <button id="pq-fire-btn">Fire Queue Now</button>
-            <button id="pq-clear-btn">Clear All</button>
+            <button id="pq-fire-btn">Fire queue now</button>
+            <button id="pq-clear-btn">Clear all</button>
           </div>
         </div>
       </div>
     `;
 
-    document.body.appendChild(panel);
-    makeDraggable(panel, document.getElementById('pq-header'));
+    // ── Strip ──
+    const strip = document.createElement('div');
+    strip.id = 'promptq-strip';
+    strip.innerHTML = `
+      <div id="pq-strip-dot"></div>
+      <span id="pq-strip-label">promptq</span>
+      <span id="pq-strip-status">Ready</span>
+      <span id="pq-strip-count" class="hidden">0</span>
+      <span id="pq-strip-chevron">▲</span>
+    `;
 
-    document.getElementById('pq-minimize').addEventListener('click', () => {
-      const body = document.getElementById('pq-body');
-      const btn  = document.getElementById('pq-minimize');
-      const hidden = body.style.display === 'none';
-      body.style.display = hidden ? '' : 'none';
-      btn.textContent = hidden ? '−' : '+';
-    });
-    document.getElementById('pq-close').addEventListener('click', () => {
-      panel.style.display = 'none';
+    // Insert before the composer container's first child
+    container.insertBefore(strip, container.firstChild);
+    container.insertBefore(panel, strip);
+
+    // ── Events ──
+    strip.addEventListener('click', togglePanel);
+
+    document.getElementById('pq-close').addEventListener('click', e => {
+      e.stopPropagation();
+      closePanel();
     });
     document.getElementById('pq-add-btn').addEventListener('click', addPrompt);
     document.getElementById('pq-input').addEventListener('keydown', e => {
@@ -407,10 +383,103 @@
     });
 
     renderQueueList();
-    updatePanel();
+    updateUI();
     startCountdown();
+
+    // Auto-open panel if there are queued items
+    if (state.queue.length > 0) openPanel();
   }
 
+  function togglePanel() {
+    panelOpen ? closePanel() : openPanel();
+  }
+
+  function openPanel() {
+    panelOpen = true;
+    const panel = document.getElementById('promptq-panel');
+    const chev  = document.getElementById('pq-strip-chevron');
+    if (panel) panel.classList.add('open');
+    if (chev)  chev.classList.add('open');
+  }
+
+  function closePanel() {
+    panelOpen = false;
+    const panel = document.getElementById('promptq-panel');
+    const chev  = document.getElementById('pq-strip-chevron');
+    if (panel) panel.classList.remove('open');
+    if (chev)  chev.classList.remove('open');
+  }
+
+  // ─── UI updates ───────────────────────────────────────────────────────────────
+  function updateUI() {
+    updateStrip();
+    updatePanel();
+  }
+
+  function updateStrip() {
+    const dot    = document.getElementById('pq-strip-dot');
+    const status = document.getElementById('pq-strip-status');
+    const count  = document.getElementById('pq-strip-count');
+    if (!dot) return;
+
+    const pending = state.queue.filter(q => q.status === 'pending').length;
+
+    const configs = {
+      IDLE:      { cls: 'green', text: 'Ready' },
+      STREAMING: { cls: 'blue',  text: 'Claude is responding...' },
+      LIMITED:   { cls: 'red',   text: `Limit active — resets in ${state.resetAt ? formatMs(state.resetAt - Date.now()) : '...'}` },
+      FIRING:    { cls: 'blue',  text: 'Firing queue...' },
+    };
+    const cfg = configs[machineState] || { cls: '', text: 'Watching...' };
+
+    dot.className    = cfg.cls;
+    status.textContent = cfg.text;
+
+    if (pending > 0) {
+      count.textContent = pending;
+      count.classList.remove('hidden');
+    } else {
+      count.classList.add('hidden');
+    }
+  }
+
+  function updatePanel() {
+    const dot        = document.getElementById('pq-dot');
+    const statusText = document.getElementById('pq-status-text');
+    const meterRow   = document.getElementById('pq-meter-row');
+    if (!dot) return;
+
+    const labels = {
+      IDLE:      ['pq-dot-green', 'Ready'],
+      STREAMING: ['pq-dot-blue',  'Claude is responding...'],
+      LIMITED:   ['pq-dot-red',   'Limit active — queue your prompts'],
+      FIRING:    ['pq-dot-blue',  'Firing queued prompts...'],
+    };
+    const [cls, text] = labels[machineState] || ['', 'Watching...'];
+    dot.className      = `pq-dot ${cls}`;
+    statusText.textContent = text;
+
+    if (meterRow) {
+      const parts = [];
+      if (state.sessionReset) parts.push(`Session resets in ${formatMs(state.sessionReset - Date.now())}`);
+      if (state.weeklyReset)  parts.push(`Weekly resets in ${formatMs(state.weeklyReset - Date.now())}`);
+      meterRow.textContent   = parts.join('  ·  ');
+      meterRow.style.display = parts.length ? '' : 'none';
+    }
+  }
+
+  function startCountdown() {
+    setInterval(() => {
+      const el = document.getElementById('pq-countdown');
+      if (!el) return;
+      if (machineState !== 'LIMITED' || !state.resetAt) { el.textContent = ''; return; }
+      const ms = state.resetAt - Date.now();
+      el.textContent = ms <= 0 ? 'resetting...' : formatMs(ms);
+      updateUI();
+    }, 1000);
+  }
+
+  // ─── Queue list render ────────────────────────────────────────────────────────
   function addPrompt() {
     const input = document.getElementById('pq-input');
     const text  = (input?.value || '').trim();
@@ -419,29 +488,31 @@
     input.value = '';
     saveState();
     renderQueueList();
+    openPanel();
   }
 
   function renderQueueList() {
-    const list   = document.getElementById('pq-queue-list');
-    const empty  = document.getElementById('pq-empty');
-    const count  = document.getElementById('pq-queue-count');
+    const list    = document.getElementById('pq-queue-list');
+    const empty   = document.getElementById('pq-empty');
+    const count   = document.getElementById('pq-queue-count');
     const fireBtn = document.getElementById('pq-fire-btn');
     if (!list) return;
 
     const pending = state.queue.filter(q => q.status === 'pending');
-    if (count)   count.textContent  = `${pending.length} queued`;
-    if (fireBtn) fireBtn.disabled   = pending.length === 0 || machineState === 'FIRING';
+    if (count)   count.textContent = `${pending.length} queued`;
+    if (fireBtn) fireBtn.disabled  = pending.length === 0 || machineState === 'FIRING';
 
-    if (state.queue.length === 0) {
+    if (!state.queue.length) {
       list.innerHTML = '';
       if (empty) empty.style.display = '';
+      updateStrip();
       return;
     }
     if (empty) empty.style.display = 'none';
 
     list.innerHTML = state.queue.map((item, i) => `
-      <div class="pq-item pq-status-${item.status}" data-idx="${i}">
-        <div class="pq-item-pos">${i + 1}</div>
+      <div class="pq-item pq-status-${item.status}">
+        <div class="pq-item-pos">${item.status === 'sending' ? '▶' : i + 1}</div>
         <div class="pq-item-text">${escHtml(item.text)}</div>
         <div class="pq-item-actions">
           ${item.status === 'pending' ? `
@@ -464,45 +535,11 @@
     list.querySelectorAll('.pq-remove').forEach(b => b.addEventListener('click', () => {
       state.queue.splice(+b.dataset.idx, 1); saveState(); renderQueueList();
     }));
+
+    updateStrip();
   }
 
-  function updatePanel() {
-    const dot        = document.getElementById('pq-dot');
-    const statusText = document.getElementById('pq-status-text');
-    const meterRow   = document.getElementById('pq-meter-row');
-    if (!dot || !statusText) return;
-
-    const labels = {
-      IDLE:      ['pq-dot-green', 'Ready'],
-      STREAMING: ['pq-dot-blue',  'Claude is responding...'],
-      LIMITED:   ['pq-dot-red',   'Limit active — queue your prompts'],
-      FIRING:    ['pq-dot-blue',  'Firing queued prompts...'],
-    };
-    const [cls, text] = labels[machineState] || ['', 'Watching...'];
-    dot.className = `pq-dot ${cls}`;
-    statusText.textContent = text;
-
-    // Meter bar
-    if (meterRow) {
-      const parts = [];
-      if (state.sessionReset) parts.push(`Session resets in ${formatMs(state.sessionReset - Date.now())}`);
-      if (state.weeklyReset)  parts.push(`Weekly resets in ${formatMs(state.weeklyReset  - Date.now())}`);
-      meterRow.textContent   = parts.join('  ·  ');
-      meterRow.style.display = parts.length ? '' : 'none';
-    }
-  }
-
-  function startCountdown() {
-    setInterval(() => {
-      const el = document.getElementById('pq-countdown');
-      if (!el) return;
-      if (machineState !== 'LIMITED' || !state.resetAt) { el.textContent = ''; return; }
-      const ms = state.resetAt - Date.now();
-      el.textContent = ms <= 0 ? 'resetting...' : formatMs(ms);
-      updatePanel(); // keep meter row fresh too
-    }, 1000);
-  }
-
+  // ─── Helpers ──────────────────────────────────────────────────────────────────
   function formatMs(ms) {
     if (ms <= 0) return 'now';
     const d = Math.floor(ms / 86400000);
@@ -514,27 +551,6 @@
     return `${m}:${String(s).padStart(2, '0')}`;
   }
 
-  function makeDraggable(el, handle) {
-    let ox = 0, oy = 0, sx = 0, sy = 0;
-    handle.style.cursor = 'grab';
-    handle.addEventListener('mousedown', e => {
-      e.preventDefault();
-      sx = e.clientX; sy = e.clientY;
-      const r = el.getBoundingClientRect();
-      ox = r.left; oy = r.top;
-      el.style.right = 'auto'; el.style.bottom = 'auto';
-      el.style.left = ox + 'px'; el.style.top = oy + 'px';
-      handle.style.cursor = 'grabbing';
-      const move = e => {
-        el.style.left = Math.max(0, ox + e.clientX - sx) + 'px';
-        el.style.top  = Math.max(0, oy + e.clientY - sy) + 'px';
-      };
-      const up = () => { handle.style.cursor = 'grab'; document.removeEventListener('mousemove', move); document.removeEventListener('mouseup', up); };
-      document.addEventListener('mousemove', move);
-      document.addEventListener('mouseup', up);
-    });
-  }
-
   function escHtml(s) {
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
@@ -543,30 +559,21 @@
 
   // ─── Background messages ──────────────────────────────────────────────────────
   chrome.runtime.onMessage.addListener((msg) => {
-    if (msg.type === 'LIMIT_RESET') {
-      state.limited = false;
-      // Don't force transition here — let tick() handle it on next poll
-      tick();
-    }
-    if (msg.type === 'OPEN_PANEL') {
-      if (!panelInjected) injectPanel();
-      const p = document.getElementById('promptq-panel');
-      if (p) p.style.display = '';
-    }
+    if (msg.type === 'LIMIT_RESET') { state.limited = false; tick(); }
+    if (msg.type === 'OPEN_PANEL')  { if (!uiInjected) injectUI(); openPanel(); }
   });
 
   // ─── Observer + polling ───────────────────────────────────────────────────────
   function startObserver() {
-    if (observerStarted) return;
-    observerStarted = true;
-
-    // DOM mutation → tick
-    new MutationObserver(() => tick()).observe(document.body, {
+    if (observerStart) return;
+    observerStart = true;
+    new MutationObserver(() => {
+      if (!uiInjected) injectUI();
+      tick();
+    }).observe(document.body, {
       childList: true, subtree: true, attributes: true,
       attributeFilter: ['aria-label', 'disabled', 'data-is-streaming'],
     });
-
-    // Safety poll every 5s
     setInterval(tick, 5000);
   }
 
@@ -575,9 +582,6 @@
     await loadState();
     startObserver();
     tick();
-
-    // If there are queued items from a previous session, show the panel
-    if (state.queue.length > 0 && !panelInjected) injectPanel();
   }
 
   if (document.readyState === 'loading') {
