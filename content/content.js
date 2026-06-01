@@ -460,7 +460,9 @@
     updateUI();
     startCountdown();
 
-    if (state.queue.length > 0) openPanel();
+    // Open panel by default so users immediately see the input
+    // They can collapse it with the × button
+    openPanel();
   }
 
   function togglePanel() { panelOpen ? closePanel() : openPanel(); }
@@ -696,4 +698,5 @@
     init();
   }
 })();
+
 
