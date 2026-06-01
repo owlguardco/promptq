@@ -1,9 +1,11 @@
 (() => {
   'use strict';
 
+  const LOG = (...a) => console.log('[promptq]', ...a);
+  LOG('content script loaded', location.href);
+
   const STATE_KEY = 'promptq_state';
   const POLL_MS   = 500;
-  const LOG       = (...a) => console.log('[promptq]', ...a);
 
   let state = {
     queue: [],
