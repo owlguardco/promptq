@@ -733,6 +733,10 @@
       renderQueueList();
     }));
 
+    // Auto-scroll queue section to bottom when items are added
+    const section = document.getElementById('pq-queue-section');
+    if (section) section.scrollTop = section.scrollHeight;
+
     updateStrip();
   }
 
@@ -826,6 +830,7 @@
     init();
   }
 })();
+
 
 
 
