@@ -181,39 +181,41 @@
     let sessionReset = null;
     let weeklyReset  = null;
 
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    let node;
-    while ((node = walker.nextNode())) {
-      const t = node.textContent;
-      if (!/resets?\s+in/i.test(t)) continue;
-      const parsed = parseResetTime(t);
-      if (!parsed) continue;
+    // The bottom bar reads:
+    //   "Session: 43% · resets in 3h 45m   [bars]   Weekly: 5% · resets in 1d 21h"
+    // but the label ("Session:" / "Weekly:") and its countdown ("resets in …")
+    // render in SEPARATE spans, with progress-bar <div>s between them. So a single
+    // text node holds either a label or a countdown, rarely both — keyword-tagging
+    // each node fails (a bare countdown node has no label) and the old "shorter =
+    // session" fallback let weekly mirror the session value.
+    //
+    // Robust strategy: locate the smallest element that contains a countdown plus a
+    // label, read its innerText (preserves left-to-right visual order across child
+    // spans, skips the bar <div>s), then slice the Session and Weekly chunks by
+    // label position and parse each independently.
+    let container = null;
+    for (const el of document.querySelectorAll('div, section, footer, p')) {
+      const txt = el.textContent || '';
+      if (!/resets?\s+in/i.test(txt)) continue;
+      if (!/session/i.test(txt) && !/weekly/i.test(txt)) continue;
+      if (!container || txt.length < (container.textContent || '').length) container = el;
+    }
 
-      // Tag by keyword in the same text chunk
-      const lc = t.toLowerCase();
-      if (lc.includes('weekly')) {
-        if (!weeklyReset) weeklyReset = parsed;
-      } else if (lc.includes('session')) {
-        if (!sessionReset) sessionReset = parsed;
-      } else {
-        // Unknown — assign to whichever slot is empty, shorter time = session
-        if (!sessionReset) sessionReset = parsed;
-        else if (!weeklyReset && parsed > sessionReset) weeklyReset = parsed;
+    const text = container ? (container.innerText || container.textContent || '') : '';
+    if (text) {
+      const sIdx = text.search(/session/i);
+      const wIdx = text.search(/weekly/i);
+
+      // Each label owns the text from itself up to the next label (or end of bar),
+      // so the Session chunk can never pick up the Weekly countdown and vice versa.
+      if (sIdx !== -1) {
+        const end = wIdx > sIdx ? wIdx : text.length;
+        sessionReset = parseResetTime(text.slice(sIdx, end));
       }
-    }
-
-    // Also scan the full bottom bar text as one string for combined nodes
-    // e.g. "Session: 43% · resets in 3h 45m ... Weekly: 5% · resets in 1d 21h"
-    const allText = document.body.innerText || '';
-    const sessionMatch = allText.match(/Session[^·\n]*resets?\s+in\s+([^·\n]+)/i);
-    const weeklyMatch  = allText.match(/Weekly[^·\n]*resets?\s+in\s+([^·\n]+)/i);
-    if (sessionMatch && !sessionReset) {
-      const p = parseResetTime('resets in ' + sessionMatch[1].trim());
-      if (p) sessionReset = p;
-    }
-    if (weeklyMatch && !weeklyReset) {
-      const p = parseResetTime('resets in ' + weeklyMatch[1].trim());
-      if (p) weeklyReset = p;
+      if (wIdx !== -1) {
+        const end = sIdx > wIdx ? sIdx : text.length;
+        weeklyReset = parseResetTime(text.slice(wIdx, end));
+      }
     }
 
     return { sessionReset, weeklyReset };
