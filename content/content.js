@@ -443,16 +443,16 @@
   function injectUI() {
     if (uiInjected) return;
 
+    // For the sidebar we don't need the composer anchor
+    // We inject a fixed sidebar to the LEFT of the main chat column
     const anchor = findComposerAnchor();
-    if (!anchor) return; // composer not in DOM yet — tick() will retry
+    if (!anchor) return;
 
     uiInjected = true;
-    LOG('injecting UI');
+    LOG('injecting UI as sidebar');
 
-    // Wrapper is position:relative container so the panel can float above
     const wrapper = document.createElement('div');
     wrapper.id = 'promptq-wrapper';
-    wrapper.style.position = 'relative';
 
     // Panel (hidden until toggled)
     const panel = document.createElement('div');
@@ -529,18 +529,10 @@
       }
     }
 
-    // Clean injection: insert wrapper as a slim row BETWEEN the
-    // composer box and the meter bar. Never touch the toolbar buttons.
-    if (meterRow) {
-      // Insert before the meter row so our strip sits between
-      // the composer and the "Session: X% · resets in Xh" text
-      meterRow.parentElement.insertBefore(wrapper, meterRow);
-      LOG('injected above meter row');
-    } else {
-      // Fallback: insert before the whole composer
-      anchor.parent.insertBefore(wrapper, anchor.composer);
-      LOG('injected before composer (fallback)');
-    }
+    // Inject as a fixed sidebar to the LEFT of the main chat column.
+    // The sidebar is position:fixed so it never disrupts the DOM layout.
+    document.body.appendChild(wrapper);
+    LOG('injected as fixed sidebar');
 
     // ── Inject "+ Queue" button next to the send button ──
     injectQueueButton();
@@ -842,6 +834,7 @@
     init();
   }
 })();
+
 
 
 
