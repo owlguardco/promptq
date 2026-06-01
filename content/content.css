@@ -57,6 +57,7 @@
 #pq-strip-dot.red   { background: #C0392B; }
 
 #pq-strip-label { font-weight: 600; }
+#pq-strip-q { color: #D85A30; }
 #pq-strip-status {
   font-size: 11px; color: rgba(0,0,0,0.4);
   overflow: hidden; text-overflow: ellipsis; max-width: 180px;
@@ -216,3 +217,4 @@
 /* Scrollbar */
 #pq-queue-section::-webkit-scrollbar { width: 3px; }
 #pq-queue-section::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 2px; }
+
