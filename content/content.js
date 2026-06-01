@@ -16,11 +16,10 @@
     weeklyReset: null,
   };
 
-  // IDLE | STREAMING | LIMITED | FIRING
   let machineState  = 'IDLE';
   let uiInjected    = false;
   let panelOpen     = false;
-  let observerStart = false;
+  let observerStarted = false;
 
   // ─── Persistence ──────────────────────────────────────────────────────────────
   function saveState() {
@@ -39,6 +38,7 @@
 
   // ─── Submit button ────────────────────────────────────────────────────────────
   function getSendButton() {
+    // Try known aria-labels first
     for (const sel of [
       'button[aria-label="Send message"]',
       'button[aria-label="Send Message"]',
@@ -47,8 +47,17 @@
       const b = document.querySelector(sel);
       if (b) return b;
     }
-    return [...document.querySelectorAll('form button, [role="textbox"] ~ * button')]
-      .filter(b => !b.disabled).pop() || null;
+    // Fallback: any enabled button near a contenteditable
+    const editable = document.querySelector('div[contenteditable="true"]');
+    if (editable) {
+      let el = editable.parentElement;
+      while (el && el !== document.body) {
+        const btns = [...el.querySelectorAll('button')].filter(b => !b.disabled);
+        if (btns.length) return btns[btns.length - 1];
+        el = el.parentElement;
+      }
+    }
+    return null;
   }
 
   function getStopButton() {
@@ -115,7 +124,7 @@
     let node;
     while ((node = walker.nextNode())) {
       const t = node.textContent;
-      if (!/resets?\s+in/i.test(t) && !/resets?\s+\d/i.test(t)) continue;
+      if (!/resets?\s+in/i.test(t)) continue;
       const parsed = parseResetTime(t);
       if (parsed) resets.push(parsed);
     }
@@ -128,20 +137,24 @@
     return ['Usage limit reached', "You've reached your", 'Keep working'].some(p => body.includes(p));
   }
 
-  // ─── Find the composer container to dock into ─────────────────────────────────
-  // claude.ai's composer sits in a div that wraps the textarea/ProseMirror + bottom bar.
-  // We look for the outermost wrapper that contains the send button.
-  function findComposerContainer() {
+  // ─── Composer container detection ─────────────────────────────────────────────
+  // Strategy: find the contenteditable input, then find its closest ancestor
+  // that also contains a send/stop button. That's the composer form wrapper.
+  // We inject our wrapper div BEFORE that element in the DOM.
+  function findComposerAnchor() {
+    const editable = document.querySelector('div[contenteditable="true"], [role="textbox"]');
+    if (!editable) return null;
+
     const sendBtn = getSendButton() || getStopButton();
     if (!sendBtn) return null;
 
-    // Walk up until we find a container that's wide enough to be the composer wrapper
-    let el = sendBtn.parentElement;
+    // Walk up from editable until we find a common ancestor with the send button
+    let el = editable.parentElement;
     while (el && el !== document.body) {
-      const rect = el.getBoundingClientRect();
-      // The composer container spans most of the page width
-      if (rect.width > window.innerWidth * 0.4 && rect.height < window.innerHeight * 0.5) {
-        return el;
+      if (el.contains(sendBtn)) {
+        // This el contains both the input and send button = the composer form
+        // Return el's parent so we can insert our wrapper before el
+        return { composer: el, parent: el.parentElement };
       }
       el = el.parentElement;
     }
@@ -169,10 +182,8 @@
       const streaming = isStreaming();
       const arrowUp   = isArrowReady();
 
-      // Inject UI whenever we can see the composer
-      if (!uiInjected && (sessionReset || weeklyReset || limited || getSendButton() || getStopButton())) {
-        injectUI();
-      }
+      // Inject as soon as the composer is in the DOM
+      if (!uiInjected) injectUI();
 
       if (limited) {
         if (machineState !== 'LIMITED') {
@@ -261,7 +272,9 @@
         await sleep(250);
         const btn = getSendButton();
         if (btn && !btn.disabled) { btn.click(); return true; }
-        editable.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+        editable.dispatchEvent(new KeyboardEvent('keydown', {
+          key: 'Enter', keyCode: 13, bubbles: true, cancelable: true
+        }));
         return true;
       }
       const ta = document.querySelector('textarea');
@@ -285,42 +298,42 @@
   }
 
   // ─── UI injection ─────────────────────────────────────────────────────────────
-  // Injects two elements:
-  //   #promptq-panel  — the expandable queue panel (hidden by default)
-  //   #promptq-strip  — the always-visible docked strip
-  // Both are inserted BEFORE the composer box, so they sit above it.
-
   function injectUI() {
     if (uiInjected) return;
 
-    const container = findComposerContainer();
-    if (!container) return; // composer not ready yet
+    const anchor = findComposerAnchor();
+    if (!anchor) return; // composer not in DOM yet — tick() will retry
 
     uiInjected = true;
+    LOG('injecting UI');
 
-    // ── Panel ──
+    // Wrapper holds both panel + strip, inserted before the composer
+    const wrapper = document.createElement('div');
+    wrapper.id = 'promptq-wrapper';
+
+    // Panel (hidden until toggled)
     const panel = document.createElement('div');
     panel.id = 'promptq-panel';
     panel.innerHTML = `
       <div id="pq-head">
         <div id="pq-logo">⏱ promptq</div>
         <div id="pq-controls">
-          <button id="pq-close" title="Close panel">×</button>
+          <button id="pq-close" title="Collapse">×</button>
         </div>
       </div>
       <div id="pq-body">
         <div id="pq-status-bar">
           <span class="pq-dot" id="pq-dot"></span>
-          <span id="pq-status-text">Watching...</span>
+          <span id="pq-status-text">Ready</span>
           <span id="pq-countdown"></span>
         </div>
-        <div id="pq-meter-row" style="display:none"></div>
+        <div id="pq-meter-row"></div>
         <div id="pq-queue-section">
           <div id="pq-queue-list"></div>
           <div id="pq-empty">No prompts queued yet.<br>Add one below to keep your flow.</div>
         </div>
         <div id="pq-add-section">
-          <textarea id="pq-input" placeholder="What do you want to ask next? (Cmd+Enter to add)" rows="3"></textarea>
+          <textarea id="pq-input" placeholder="Queue your next prompt... (Cmd+Enter to add)" rows="3"></textarea>
           <div id="pq-add-row">
             <span id="pq-queue-count">0 queued</span>
             <button id="pq-add-btn">+ Add</button>
@@ -343,7 +356,7 @@
       </div>
     `;
 
-    // ── Strip ──
+    // Strip (always visible)
     const strip = document.createElement('div');
     strip.id = 'promptq-strip';
     strip.innerHTML = `
@@ -354,20 +367,20 @@
       <span id="pq-strip-chevron">▲</span>
     `;
 
-    // Insert before the composer container's first child
-    container.insertBefore(strip, container.firstChild);
-    container.insertBefore(panel, strip);
+    wrapper.appendChild(panel);
+    wrapper.appendChild(strip);
 
-    // ── Events ──
+    // Insert wrapper before the composer element
+    anchor.parent.insertBefore(wrapper, anchor.composer);
+
+    // ── Wire events ──
     strip.addEventListener('click', togglePanel);
-
     document.getElementById('pq-close').addEventListener('click', e => {
-      e.stopPropagation();
-      closePanel();
+      e.stopPropagation(); closePanel();
     });
     document.getElementById('pq-add-btn').addEventListener('click', addPrompt);
     document.getElementById('pq-input').addEventListener('keydown', e => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') addPrompt();
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); addPrompt(); }
     });
     document.getElementById('pq-autofire').addEventListener('change', e => {
       state.autoFire = e.target.checked; saveState();
@@ -386,83 +399,72 @@
     updateUI();
     startCountdown();
 
-    // Auto-open panel if there are queued items
     if (state.queue.length > 0) openPanel();
   }
 
-  function togglePanel() {
-    panelOpen ? closePanel() : openPanel();
-  }
+  function togglePanel() { panelOpen ? closePanel() : openPanel(); }
 
   function openPanel() {
     panelOpen = true;
-    const panel = document.getElementById('promptq-panel');
-    const chev  = document.getElementById('pq-strip-chevron');
-    if (panel) panel.classList.add('open');
-    if (chev)  chev.classList.add('open');
+    document.getElementById('promptq-panel')?.classList.add('open');
+    const chev = document.getElementById('pq-strip-chevron');
+    if (chev) chev.classList.add('open');
   }
 
   function closePanel() {
     panelOpen = false;
-    const panel = document.getElementById('promptq-panel');
-    const chev  = document.getElementById('pq-strip-chevron');
-    if (panel) panel.classList.remove('open');
-    if (chev)  chev.classList.remove('open');
+    document.getElementById('promptq-panel')?.classList.remove('open');
+    const chev = document.getElementById('pq-strip-chevron');
+    if (chev) chev.classList.remove('open');
   }
 
   // ─── UI updates ───────────────────────────────────────────────────────────────
   function updateUI() {
+    if (!uiInjected) return;
     updateStrip();
     updatePanel();
   }
 
+  const STATE_CONFIG = {
+    IDLE:      { dotClass: 'green', stripText: 'Ready',                   panelText: 'Ready' },
+    STREAMING: { dotClass: 'blue',  stripText: 'Claude is responding...', panelText: 'Claude is responding...' },
+    LIMITED:   { dotClass: 'red',   stripText: 'Limit active',            panelText: 'Limit active — queue your prompts' },
+    FIRING:    { dotClass: 'blue',  stripText: 'Firing queue...',         panelText: 'Firing queued prompts...' },
+  };
+
   function updateStrip() {
-    const dot    = document.getElementById('pq-strip-dot');
-    const status = document.getElementById('pq-strip-status');
-    const count  = document.getElementById('pq-strip-count');
+    const cfg     = STATE_CONFIG[machineState] || STATE_CONFIG.IDLE;
+    const dot     = document.getElementById('pq-strip-dot');
+    const status  = document.getElementById('pq-strip-status');
+    const count   = document.getElementById('pq-strip-count');
     if (!dot) return;
 
+    dot.className = cfg.dotClass;
+    status.textContent = machineState === 'LIMITED' && state.resetAt
+      ? `Limit active — resets in ${formatMs(state.resetAt - Date.now())}`
+      : cfg.stripText;
+
     const pending = state.queue.filter(q => q.status === 'pending').length;
-
-    const configs = {
-      IDLE:      { cls: 'green', text: 'Ready' },
-      STREAMING: { cls: 'blue',  text: 'Claude is responding...' },
-      LIMITED:   { cls: 'red',   text: `Limit active — resets in ${state.resetAt ? formatMs(state.resetAt - Date.now()) : '...'}` },
-      FIRING:    { cls: 'blue',  text: 'Firing queue...' },
-    };
-    const cfg = configs[machineState] || { cls: '', text: 'Watching...' };
-
-    dot.className    = cfg.cls;
-    status.textContent = cfg.text;
-
-    if (pending > 0) {
-      count.textContent = pending;
-      count.classList.remove('hidden');
-    } else {
-      count.classList.add('hidden');
-    }
+    count.textContent = pending;
+    count.classList.toggle('hidden', pending === 0);
   }
 
   function updatePanel() {
+    const cfg        = STATE_CONFIG[machineState] || STATE_CONFIG.IDLE;
     const dot        = document.getElementById('pq-dot');
     const statusText = document.getElementById('pq-status-text');
     const meterRow   = document.getElementById('pq-meter-row');
     if (!dot) return;
 
-    const labels = {
-      IDLE:      ['pq-dot-green', 'Ready'],
-      STREAMING: ['pq-dot-blue',  'Claude is responding...'],
-      LIMITED:   ['pq-dot-red',   'Limit active — queue your prompts'],
-      FIRING:    ['pq-dot-blue',  'Firing queued prompts...'],
-    };
-    const [cls, text] = labels[machineState] || ['', 'Watching...'];
-    dot.className      = `pq-dot ${cls}`;
-    statusText.textContent = text;
+    dot.className = `pq-dot pq-dot-${cfg.dotClass}`;
+    statusText.textContent = cfg.panelText;
 
     if (meterRow) {
       const parts = [];
-      if (state.sessionReset) parts.push(`Session resets in ${formatMs(state.sessionReset - Date.now())}`);
-      if (state.weeklyReset)  parts.push(`Weekly resets in ${formatMs(state.weeklyReset - Date.now())}`);
+      if (state.sessionReset && state.sessionReset > Date.now())
+        parts.push(`Session resets in ${formatMs(state.sessionReset - Date.now())}`);
+      if (state.weeklyReset && state.weeklyReset > Date.now())
+        parts.push(`Weekly resets in ${formatMs(state.weeklyReset - Date.now())}`);
       meterRow.textContent   = parts.join('  ·  ');
       meterRow.style.display = parts.length ? '' : 'none';
     }
@@ -475,11 +477,11 @@
       if (machineState !== 'LIMITED' || !state.resetAt) { el.textContent = ''; return; }
       const ms = state.resetAt - Date.now();
       el.textContent = ms <= 0 ? 'resetting...' : formatMs(ms);
-      updateUI();
+      updateStrip(); // keep strip in sync too
     }, 1000);
   }
 
-  // ─── Queue list render ────────────────────────────────────────────────────────
+  // ─── Queue list ───────────────────────────────────────────────────────────────
   function addPrompt() {
     const input = document.getElementById('pq-input');
     const text  = (input?.value || '').trim();
@@ -488,7 +490,7 @@
     input.value = '';
     saveState();
     renderQueueList();
-    openPanel();
+    if (!panelOpen) openPanel();
   }
 
   function renderQueueList() {
@@ -501,14 +503,7 @@
     const pending = state.queue.filter(q => q.status === 'pending');
     if (count)   count.textContent = `${pending.length} queued`;
     if (fireBtn) fireBtn.disabled  = pending.length === 0 || machineState === 'FIRING';
-
-    if (!state.queue.length) {
-      list.innerHTML = '';
-      if (empty) empty.style.display = '';
-      updateStrip();
-      return;
-    }
-    if (empty) empty.style.display = 'none';
+    if (empty)   empty.style.display = state.queue.length === 0 ? '' : 'none';
 
     list.innerHTML = state.queue.map((item, i) => `
       <div class="pq-item pq-status-${item.status}">
@@ -560,13 +555,13 @@
   // ─── Background messages ──────────────────────────────────────────────────────
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'LIMIT_RESET') { state.limited = false; tick(); }
-    if (msg.type === 'OPEN_PANEL')  { if (!uiInjected) injectUI(); openPanel(); }
+    if (msg.type === 'OPEN_PANEL')  { openPanel(); }
   });
 
-  // ─── Observer + polling ───────────────────────────────────────────────────────
+  // ─── Observer ────────────────────────────────────────────────────────────────
   function startObserver() {
-    if (observerStart) return;
-    observerStart = true;
+    if (observerStarted) return;
+    observerStarted = true;
     new MutationObserver(() => {
       if (!uiInjected) injectUI();
       tick();
