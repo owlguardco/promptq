@@ -4,20 +4,14 @@
   Never overlaps conversation content.
 */
 
-/* ── Wrapper — fixed to bottom, left-aligned with composer ──────────────── */
+/* ── Wrapper — sits in DOM flow directly above the composer ─────────────── */
 #promptq-wrapper {
-  position: fixed;
-  bottom: 52px; /* sits just above the meter bar */
-  left: 50%;
-  transform: translateX(-50%);
-  max-width: 660px;
-  width: calc(100% - 340px); /* matches claude.ai's composer width */
-  z-index: 99998;
+  position: relative;
   display: flex;
-  align-items: flex-end;
-  pointer-events: none; /* let clicks pass through except on our elements */
+  align-items: center;
+  width: 100%;
+  margin-bottom: 4px;
 }
-#promptq-wrapper > * { pointer-events: auto; }
 
 /* ── Strip — the always-visible pill ─────────────────────────────────────── */
 #promptq-strip {
