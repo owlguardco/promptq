@@ -512,16 +512,37 @@
       }
     }
 
-    if (meterRow) {
-      // Insert our wrapper as the first child of the meter row
-      // so strip appears LEFT of "Session: X% · resets in Xh"
+    // Find the toolbar row that holds the + button and attachment icons
+    // That's the row INSIDE the composer box at the bottom left
+    // Strategy: find the + button (aria-label contains "attach" or just a + text)
+    // then get its parent row
+    let toolbarRow = null;
+
+    // Look for the row containing the + button inside the composer
+    const allBtns = anchor.composer.querySelectorAll('button');
+    for (const btn of allBtns) {
+      const lbl = (btn.getAttribute('aria-label') || btn.textContent || '').trim();
+      if (lbl === '+' || lbl.toLowerCase().includes('attach') || lbl.toLowerCase().includes('add')) {
+        // This button's parent row is our target
+        toolbarRow = btn.closest('[class*="flex"], [class*="row"], div');
+        if (toolbarRow && toolbarRow !== anchor.composer) break;
+      }
+    }
+
+    if (toolbarRow) {
+      // Append our wrapper to the END of the toolbar row
+      // so it sits right after the existing + and icon buttons
+      toolbarRow.style.display = 'flex';
+      toolbarRow.style.alignItems = 'center';
+      toolbarRow.appendChild(wrapper);
+      LOG('injected into toolbar row');
+    } else if (meterRow) {
       meterRow.style.display = 'flex';
       meterRow.style.alignItems = 'center';
       meterRow.style.gap = '8px';
       meterRow.insertBefore(wrapper, meterRow.firstChild);
-      LOG('injected into meter row');
+      LOG('injected into meter row (fallback)');
     } else {
-      // Fallback: insert before the composer
       anchor.parent.insertBefore(wrapper, anchor.composer);
       LOG('injected before composer (fallback)');
     }
@@ -826,6 +847,7 @@
     init();
   }
 })();
+
 
 
 
