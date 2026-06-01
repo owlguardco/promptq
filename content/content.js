@@ -475,7 +475,7 @@
     strip.id = 'promptq-strip';
     strip.innerHTML = `
       <div id="pq-strip-dot"></div>
-      <span id="pq-strip-label">promptq</span>
+      <span id="pq-strip-label">prompt<span id="pq-strip-q">q</span></span>
       <span id="pq-strip-status">Ready</span>
       <span id="pq-strip-count" class="hidden">0</span>
       <span id="pq-strip-chevron">▲</span>
@@ -802,6 +802,7 @@
     init();
   }
 })();
+
 
 
 
