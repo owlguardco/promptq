@@ -11,6 +11,7 @@
     queue: [],
     autoFire: true,
     waitForResponse: true,
+    autoClearDone: true,
     delayBetween: 800,
     limited: false,
     resetAt: null,
@@ -76,8 +77,8 @@
 
   // ─── Persistence ──────────────────────────────────────────────────────────────
   function saveState() {
-    const { queue, autoFire, waitForResponse, delayBetween } = state;
-    chrome.storage.local.set({ [STATE_KEY]: { queue, autoFire, waitForResponse, delayBetween } });
+    const { queue, autoFire, waitForResponse, autoClearDone, delayBetween } = state;
+    chrome.storage.local.set({ [STATE_KEY]: { queue, autoFire, waitForResponse, autoClearDone, delayBetween } });
   }
 
   async function loadState() {
@@ -340,12 +341,18 @@
     transition('IDLE');
     renderQueueList();
 
-    // Auto-clear done items after 4s so the queue stays clean
-    setTimeout(() => {
-      state.queue = state.queue.filter(q => q.status === 'pending');
-      saveState();
-      renderQueueList();
-    }, 4000);
+    // Auto-clear ONLY done items after 3s (keeps pending + failed).
+    if (state.autoClearDone !== false) {
+      setTimeout(() => {
+        const before = state.queue.length;
+        state.queue = state.queue.filter(q => q.status !== 'done');
+        if (state.queue.length !== before) {
+          saveState();
+          renderQueueList();
+          LOG('auto-cleared done items');
+        }
+      }, 3000);
+    }
   }
 
   // ─── Editor text insertion ─────────────────────────────────────────────────────
@@ -491,8 +498,13 @@
             <input type="checkbox" id="pq-wait" ${state.waitForResponse ? 'checked' : ''}>
             <span>Wait for response</span>
           </label>
+          <label class="pq-toggle-row">
+            <input type="checkbox" id="pq-autoclear" ${state.autoClearDone !== false ? 'checked' : ''}>
+            <span>Auto-clear completed</span>
+          </label>
           <div id="pq-fire-row">
             <button id="pq-fire-btn">Fire queue now</button>
+            <button id="pq-clear-done-btn">Clear done</button>
             <button id="pq-clear-btn">Clear all</button>
           </div>
         </div>
@@ -554,6 +566,13 @@
     });
     document.getElementById('pq-clear-btn').addEventListener('click', () => {
       state.queue = []; saveState(); renderQueueList();
+    });
+    document.getElementById('pq-clear-done-btn').addEventListener('click', () => {
+      state.queue = state.queue.filter(q => q.status !== 'done');
+      saveState(); renderQueueList();
+    });
+    document.getElementById('pq-autoclear').addEventListener('change', e => {
+      state.autoClearDone = e.target.checked; saveState();
     });
 
     renderQueueList();
@@ -875,6 +894,11 @@
   // ─── Init ─────────────────────────────────────────────────────────────────────
   async function init() {
     await loadState();
+    // Clear any stale 'done' items left over from a previous session
+    if (state.autoClearDone !== false && state.queue.some(q => q.status === 'done')) {
+      state.queue = state.queue.filter(q => q.status !== 'done');
+      saveState();
+    }
     startObserver();
     tick();
   }
@@ -885,6 +909,7 @@
     init();
   }
 })();
+
 
 
 
