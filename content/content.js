@@ -12,10 +12,13 @@
     autoFire: true,
     waitForResponse: true,
     delayBetween: 800,
+    autoClear: true,
     limited: false,
     resetAt: null,
     sessionReset: null,
     weeklyReset: null,
+    sessionUtil: 0,   // 0-100, from API (source of truth for hard-limit)
+    weeklyUtil: 0,    // 0-100, from API
   };
 
   let machineState  = 'IDLE';
@@ -76,8 +79,15 @@
 
   // ─── Persistence ──────────────────────────────────────────────────────────────
   function saveState() {
-    const { queue, autoFire, waitForResponse, delayBetween } = state;
-    chrome.storage.local.set({ [STATE_KEY]: { queue, autoFire, waitForResponse, delayBetween } });
+    const { queue, autoFire, waitForResponse, delayBetween, autoClear } = state;
+    // Persist only attachment METADATA, never blobs (those live in IndexedDB).
+    const slimQueue = queue.map(({ id, text, status, attachments }) => ({
+      id, text, status,
+      attachments: (attachments || []).map(({ id, name, type, size }) => ({ id, name, type, size })),
+    }));
+    chrome.storage.local.set({
+      [STATE_KEY]: { queue: slimQueue, autoFire, waitForResponse, delayBetween, autoClear },
+    });
   }
 
   async function loadState() {
@@ -151,61 +161,40 @@
     return false;
   }
 
-  // ─── Rate limit detection ─────────────────────────────────────────────────────
-  function parseResetTime(text) {
-    const t = text || '';
-    const abs = t.match(/resets?\s+(?:at\s+)?(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-    if (abs) {
-      let h = parseInt(abs[1], 10), m = parseInt(abs[2], 10);
-      const ap = abs[3].toUpperCase();
-      if (ap === 'PM' && h !== 12) h += 12;
-      if (ap === 'AM' && h === 12) h = 0;
-      const d = new Date(); d.setHours(h, m, 0, 0);
-      if (d <= new Date()) d.setDate(d.getDate() + 1);
-      return d.getTime();
-    }
-    const dh = t.match(/resets?\s+in\s+(\d+)d\s+(\d+)h/i);
-    if (dh) return Date.now() + (parseInt(dh[1])*24*60 + parseInt(dh[2])*60)*60000;
-    const d2 = t.match(/resets?\s+in\s+(\d+)d/i);
-    if (d2) return Date.now() + parseInt(d2[1])*86400000;
-    const hm = t.match(/resets?\s+in\s+(\d+)h\s+(\d+)m/i);
-    if (hm) return Date.now() + (parseInt(hm[1])*60 + parseInt(hm[2]))*60000;
-    const h2 = t.match(/resets?\s+in\s+(\d+)h/i);
-    if (h2) return Date.now() + parseInt(h2[1])*3600000;
-    const m2 = t.match(/resets?\s+in\s+(\d+)m/i);
-    if (m2) return Date.now() + parseInt(m2[1])*60000;
-    return null;
-  }
-
-  function parseMeterBar() {
-    // claude.ai now shows only one reset timer — Weekly.
-    // Bar text: "Weekly: X% · resets in 1d 14h"
-    // We grab the first "resets in …" we find and treat it as the weekly reset.
-    let sessionReset = null;
-    let weeklyReset  = null;
-
-    const allText = document.body.innerText || '';
-
-    // Try Weekly first
-    const wm = allText.match(/Weekly[^\n]*?resets?\s+in\s+([\d]+d[\s\d]+h|[\d]+h[\s\d]+m|[\d]+h|[\d]+m|[\d]+d)/i);
-    if (wm) weeklyReset = parseResetTime('resets in ' + wm[1].trim());
-
-    // Try Session (may come back in future)
-    const sm = allText.match(/Session[^\n]*?resets?\s+in\s+([\d]+d[\s\d]+h|[\d]+h[\s\d]+m|[\d]+h|[\d]+m|[\d]+d)/i);
-    if (sm) sessionReset = parseResetTime('resets in ' + sm[1].trim());
-
-    // Fallback: just grab any "resets in X" if no labels found
-    if (!weeklyReset && !sessionReset) {
-      const any = allText.match(/resets?\s+in\s+([\d]+d[\s\d]+h|[\d]+h[\s\d]+m|[\d]+h|[\d]+m|[\d]+d)/i);
-      if (any) weeklyReset = parseResetTime('resets in ' + any[1].trim());
-    }
-
-    return { sessionReset, weeklyReset };
-  }
-
+  // ─── Rate limit detection — API only, no DOM scraping ─────────────────────────
+  // The interceptor (MAIN world) posts normalized usage from Claude's own /usage
+  // endpoint and SSE message_limit events. A window is exhausted when its
+  // utilization hits 100% and its reset is still in the future.
   function isHardLimited() {
-    const body = document.body.innerText || '';
-    return ['Usage limit reached', "You've reached your", 'Keep working'].some(p => body.includes(p));
+    const now = Date.now();
+    return (state.sessionUtil >= 100 && state.sessionReset > now)
+        || (state.weeklyUtil  >= 100 && state.weeklyReset  > now);
+  }
+
+  // Which reset timestamp to count down to while limited — prefer the window that
+  // is actually exhausted, falling back to whichever reset we know about.
+  function limitedResetAt() {
+    const now = Date.now();
+    if (state.sessionUtil >= 100 && state.sessionReset > now) return state.sessionReset;
+    if (state.weeklyUtil  >= 100 && state.weeklyReset  > now) return state.weeklyReset;
+    return state.sessionReset || state.weeklyReset || (now + 3600000);
+  }
+
+  // Apply a normalized usage payload from the interceptor (USAGE or MESSAGE_LIMIT).
+  // Shape: { session?: {resetsAt, utilization}, weekly?: {resetsAt, utilization} }
+  function applyUsage(payload) {
+    if (!payload) return;
+    if (payload.session) {
+      if (payload.session.resetsAt) state.sessionReset = payload.session.resetsAt;
+      if (typeof payload.session.utilization === 'number') state.sessionUtil = payload.session.utilization;
+    }
+    if (payload.weekly) {
+      if (payload.weekly.resetsAt) state.weeklyReset = payload.weekly.resetsAt;
+      if (typeof payload.weekly.utilization === 'number') state.weeklyUtil = payload.weekly.utilization;
+    }
+    // Re-evaluate the state machine now that limits may have changed.
+    scheduleTick(true);
+    updateUI();
   }
 
   // ─── Composer container detection ─────────────────────────────────────────────
@@ -245,16 +234,8 @@
     if (loopRunning) return;
     loopRunning = true;
     try {
-      // parseMeterBar does a full TreeWalker scan — only run it every 5s,
-      // not on every attribute-change tick (which fires hundreds of times/sec)
-      const now = Date.now();
-      if (!tick.lastMeterScan || now - tick.lastMeterScan > 5000) {
-        tick.lastMeterScan = now;
-        const { sessionReset, weeklyReset } = parseMeterBar();
-        if (sessionReset) state.sessionReset = sessionReset;
-        if (weeklyReset)  state.weeklyReset  = weeklyReset;
-      }
-
+      // Limit state is driven entirely by the API now (interceptor → applyUsage);
+      // no DOM scraping here.
       const limited   = isHardLimited();
       const streaming = isStreaming();
       const arrowUp   = isArrowReady();
@@ -265,7 +246,7 @@
 
       if (limited) {
         if (machineState !== 'LIMITED') {
-          const resetAt = sessionReset || weeklyReset || (Date.now() + 3600000);
+          const resetAt = limitedResetAt();
           state.limited = true;
           state.resetAt = resetAt;
           chrome.runtime.sendMessage({ type: 'SET_ALARM', resetAt });
@@ -631,15 +612,18 @@
     statusText.textContent = cfg.panelText;
 
     if (meterRow) {
-      const parts = [];
-      if (state.sessionReset && state.sessionReset > Date.now())
-        parts.push(`Session resets in ${formatMs(state.sessionReset - Date.now())}`);
-      if (state.weeklyReset && state.weeklyReset > Date.now())
-        parts.push(`Weekly resets in ${formatMs(state.weeklyReset - Date.now())}`);
-      // If only one exists show it without a label prefix
-      meterRow.textContent   = parts.length === 1
-        ? parts[0].replace(/^(Session|Weekly) resets in /, 'Resets in ')
-        : parts.join('  ·  ');
+      const now = Date.now();
+      const fmtWindow = (label, util, reset) => {
+        const bits = [];
+        if (typeof util === 'number' && util > 0) bits.push(`${Math.round(util)}%`);
+        if (reset && reset > now) bits.push(`resets in ${formatMs(reset - now)}`);
+        return bits.length ? `${label} ${bits.join(' · ')}` : null;
+      };
+      const parts = [
+        fmtWindow('Session', state.sessionUtil, state.sessionReset),
+        fmtWindow('Weekly',  state.weeklyUtil,  state.weeklyReset),
+      ].filter(Boolean);
+      meterRow.textContent   = parts.join('   ·   ');
       meterRow.style.display = parts.length ? '' : 'none';
     }
   }
@@ -783,29 +767,13 @@
     const d = event.data;
     if (!d || d.source !== 'promptq-interceptor') return;
 
-    if (d.type === 'USAGE') {
-      // Full usage snapshot: { session: {resetsAt, utilization}, weekly: {...} }
-      if (d.payload.session?.resetsAt) state.sessionReset = d.payload.session.resetsAt;
-      if (d.payload.weekly?.resetsAt)  state.weeklyReset  = d.payload.weekly.resetsAt;
-      LOG('usage from API:', d.payload);
-      updateUI();
-    }
-
-    if (d.type === 'MESSAGE_LIMIT') {
-      // Live SSE limit event during a completion
-      const ml = d.payload;
-      if (ml.resetsAt) state.resetAt = ml.resetsAt;
-
-      // Hard limit detection from the real API, not banner text
-      if (ml.type === 'exceeded_limit' || ml.type === 'rate_limited') {
-        if (machineState !== 'LIMITED') {
-          state.limited = true;
-          state.resetAt = ml.resetsAt || state.sessionReset || (Date.now() + 3600000);
-          chrome.runtime.sendMessage({ type: 'SET_ALARM', resetAt: state.resetAt });
-          transition('LIMITED');
-        }
-      }
-      LOG('message_limit:', ml);
+    // Both USAGE (full snapshot) and MESSAGE_LIMIT (live SSE) arrive already
+    // normalized to { session?: {resetsAt, utilization}, weekly?: {resetsAt, utilization} }.
+    // applyUsage() updates state and lets the state machine derive LIMITED from
+    // utilization >= 100 — no separate "exceeded" type to special-case.
+    if (d.type === 'USAGE' || d.type === 'MESSAGE_LIMIT') {
+      LOG(d.type, d.payload);
+      applyUsage(d.payload);
     }
 
     if (d.type === 'INTERCEPTOR_READY') {
