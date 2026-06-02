@@ -26,6 +26,7 @@
   let panelOpen     = false;
   let observerStarted = false;
   let renderTimer   = null;
+  let stagedFiles   = [];   // File objects attached to the prompt being composed
 
   // Detect claude.ai's actual theme and apply it to our elements.
   // claude.ai sets class="dark" or data-theme="dark" on <html> or <body>.
@@ -295,7 +296,7 @@
       item.status = 'sending';
       saveState(); renderQueueList();
 
-      const ok = await submitPrompt(item.text);
+      const ok = await submitPrompt(item);
       item.status = ok ? 'done' : 'failed';
       saveState(); renderQueueList();
 
@@ -391,7 +392,9 @@
   }
 
   // ─── Submit ───────────────────────────────────────────────────────────────────
-  async function submitPrompt(text) {
+  async function submitPrompt(item) {
+    const text        = typeof item === 'string' ? item : (item?.text || '');
+    const attachments = (item && typeof item === 'object' && item.attachments) ? item.attachments : [];
     try {
       if (!isArrowReady()) {
         const ready = await waitForArrow();
@@ -401,7 +404,20 @@
       if (editable) {
         editable.focus();
         await sleep(100);
-        insertEditableText(editable, text);
+        if (text) insertEditableText(editable, text);
+
+        // Re-attach files via claude.ai's own upload pipeline, then wait for the
+        // send button to re-enable (uploads complete) before clicking it.
+        if (attachments.length) {
+          const files = await loadAttachmentFiles(attachments);
+          if (files.length) {
+            await attachFilesToComposer(files);
+            await sleep(400);
+            const uploaded = await waitForArrow();
+            if (!uploaded) { LOG('attachment upload timed out'); return false; }
+          }
+        }
+
         await sleep(250);
         const btn = getSendButton();
         if (btn && !btn.disabled) { btn.click(); return true; }
@@ -468,8 +484,11 @@
           <div id="pq-empty">No prompts queued yet.<br>Add one below to keep your flow.</div>
         </div>
         <div id="pq-add-section">
-          <textarea id="pq-input" placeholder="Queue your next prompt... (Cmd+Enter to add)" rows="3"></textarea>
+          <textarea id="pq-input" placeholder="Queue your next prompt... (Cmd+Enter to add · drop files to attach)" rows="3"></textarea>
+          <div id="pq-attach-stage"></div>
           <div id="pq-add-row">
+            <button id="pq-attach-btn" title="Attach files">📎</button>
+            <input type="file" id="pq-file-input" multiple hidden>
             <span id="pq-queue-count">0 queued</span>
             <button id="pq-add-btn">+ Add</button>
           </div>
@@ -540,6 +559,25 @@
     document.getElementById('pq-input').addEventListener('keydown', e => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); addPrompt(); }
     });
+
+    // ── Attachments: paperclip → file picker, plus drag-drop onto the textarea ──
+    const fileInput = document.getElementById('pq-file-input');
+    document.getElementById('pq-attach-btn').addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', e => {
+      stageFiles(e.target.files);
+      fileInput.value = ''; // allow re-picking the same file
+    });
+    const inputEl = document.getElementById('pq-input');
+    ['dragenter', 'dragover'].forEach(ev => inputEl.addEventListener(ev, e => {
+      e.preventDefault(); e.stopPropagation(); inputEl.classList.add('pq-drag');
+    }));
+    ['dragleave', 'dragend'].forEach(ev => inputEl.addEventListener(ev, e => {
+      e.preventDefault(); inputEl.classList.remove('pq-drag');
+    }));
+    inputEl.addEventListener('drop', e => {
+      e.preventDefault(); e.stopPropagation(); inputEl.classList.remove('pq-drag');
+      if (e.dataTransfer?.files?.length) stageFiles(e.dataTransfer.files);
+    });
     document.getElementById('pq-autofire').addEventListener('change', e => {
       state.autoFire = e.target.checked; saveState();
     });
@@ -560,6 +598,7 @@
     });
 
     renderQueueList();
+    renderStage();
     updateUI();
     applyTheme();
     startCountdown();
@@ -662,7 +701,7 @@
   }
 
   // ─── Queue list ───────────────────────────────────────────────────────────────
-  function addPrompt() {
+  async function addPrompt() {
     // Read from the main claude.ai composer, not a separate textarea
     const editable = document.querySelector('div[contenteditable="true"], [role="textbox"]');
     const ta       = document.querySelector('textarea');
@@ -690,12 +729,122 @@
       }
     }
 
-    if (!text) return;
-    state.queue.push({ id: Date.now(), text, status: 'pending' });
+    if (!text && stagedFiles.length === 0) return;
+
+    const id = Date.now();
+    // Persist staged file bytes to IndexedDB; keep only metadata on the queue item.
+    const attachments = [];
+    for (let i = 0; i < stagedFiles.length; i++) {
+      const f = stagedFiles[i];
+      const attId = `${id}-${i}`;
+      try {
+        await attachStore.put(attId, f);
+        attachments.push({ id: attId, name: f.name, type: f.type, size: f.size });
+      } catch (e) { LOG('attach store failed', f.name, e); }
+    }
+
+    state.queue.push({ id, text, status: 'pending', attachments });
+    stagedFiles = [];
+    renderStage();
     saveState();
     scheduleRender();
     if (!panelOpen) openPanel();
-    LOG('queued:', text.slice(0, 50));
+    LOG('queued:', text.slice(0, 50), attachments.length ? `+${attachments.length} file(s)` : '');
+  }
+
+  // ─── Staged attachments (pre-queue) ───────────────────────────────────────────
+  function isImageType(t) { return /^image\//.test(t || ''); }
+
+  function stageFiles(fileList) {
+    for (const f of fileList) stagedFiles.push(f);
+    renderStage();
+  }
+
+  function renderStage() {
+    const stage = document.getElementById('pq-attach-stage');
+    if (!stage) return;
+    if (!stagedFiles.length) { stage.innerHTML = ''; stage.style.display = 'none'; return; }
+    stage.style.display = 'flex';
+    stage.innerHTML = stagedFiles.map((f, i) => `
+      <span class="pq-chip" title="${escHtml(f.name)}">
+        <span class="pq-chip-ic">${isImageType(f.type) ? '🖼' : '📎'}</span>
+        <span class="pq-chip-name">${escHtml(f.name)}</span>
+        <button class="pq-chip-x" data-i="${i}" title="Remove">×</button>
+      </span>`).join('');
+    stage.querySelectorAll('.pq-chip-x').forEach(b => b.addEventListener('click', () => {
+      stagedFiles.splice(+b.dataset.i, 1); renderStage();
+    }));
+  }
+
+  // Build chips for an already-queued item's attachments (display only).
+  function attHtml(item) {
+    if (!item.attachments || !item.attachments.length) return '';
+    return `<div class="pq-item-atts">` + item.attachments.map(a =>
+      `<span class="pq-att" title="${escHtml(a.name)}">${isImageType(a.type) ? '🖼' : '📎'} ${escHtml(a.name)}</span>`
+    ).join('') + `</div>`;
+  }
+
+  // Load queued attachment metadata back into real File objects from IndexedDB.
+  async function loadAttachmentFiles(attachments) {
+    const files = [];
+    for (const a of attachments || []) {
+      try {
+        const blob = await attachStore.get(a.id);
+        if (blob) files.push(new File([blob], a.name, { type: a.type || blob.type || 'application/octet-stream' }));
+      } catch (e) { LOG('load attachment failed', a.id, e); }
+    }
+    return files;
+  }
+
+  // claude.ai's own hidden file input (never our own #pq-file-input).
+  function findComposerFileInput() {
+    const editable = document.querySelector('div[contenteditable="true"], [role="textbox"]');
+    if (editable) {
+      let el = editable.parentElement;
+      for (let i = 0; i < 6 && el; i++) {
+        const inp = el.querySelector('input[type="file"]:not(#pq-file-input)');
+        if (inp) return inp;
+        el = el.parentElement;
+      }
+    }
+    return document.querySelector('input[type="file"]:not(#pq-file-input)');
+  }
+
+  // Replay files into claude.ai's composer so its native upload runs. Tries the
+  // real file input first (most reliable), then a synthetic drop, then paste.
+  async function attachFilesToComposer(files) {
+    const dt = new DataTransfer();
+    for (const f of files) dt.items.add(f);
+
+    const fileInput = findComposerFileInput();
+    if (fileInput) {
+      try {
+        fileInput.files = dt.files;
+        fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+        fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      } catch (e) { LOG('file-input inject failed', e); }
+    }
+
+    const editable = document.querySelector('div[contenteditable="true"], [role="textbox"]');
+    const target = editable?.closest('form') || editable?.parentElement || editable;
+    if (target) {
+      try {
+        for (const type of ['dragenter', 'dragover', 'drop']) {
+          target.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
+        }
+        return true;
+      } catch (e) { LOG('drop inject failed', e); }
+    }
+
+    if (editable) {
+      try {
+        editable.focus();
+        editable.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt }));
+        return true;
+      } catch (e) { LOG('paste inject failed', e); }
+    }
+    return false;
   }
 
   function renderQueueList() {
@@ -713,7 +862,7 @@
     list.innerHTML = state.queue.map((item, i) => `
       <div class="pq-item pq-status-${item.status}">
         <div class="pq-item-pos">${item.status === 'sending' ? '▶' : i + 1}</div>
-        <div class="pq-item-text">${escHtml(item.text)}</div>
+        <div class="pq-item-text">${item.text ? escHtml(item.text) : '<span class="pq-att-only">(attachment only)</span>'}${attHtml(item)}</div>
         <div class="pq-item-actions">
           ${item.status === 'pending' ? `
             <button class="pq-move-up"   data-idx="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
