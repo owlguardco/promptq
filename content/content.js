@@ -775,6 +775,44 @@
     }
   });
 
+  // ─── Interceptor messages (from page-context fetch hook) ──────────────────────
+  // The interceptor reads Claude's real /usage API and SSE message_limit events
+  // and posts exact reset timestamps here. This is the source of truth for limits.
+  window.addEventListener('message', (event) => {
+    if (event.source !== window) return;
+    const d = event.data;
+    if (!d || d.source !== 'promptq-interceptor') return;
+
+    if (d.type === 'USAGE') {
+      // Full usage snapshot: { session: {resetsAt, utilization}, weekly: {...} }
+      if (d.payload.session?.resetsAt) state.sessionReset = d.payload.session.resetsAt;
+      if (d.payload.weekly?.resetsAt)  state.weeklyReset  = d.payload.weekly.resetsAt;
+      LOG('usage from API:', d.payload);
+      updateUI();
+    }
+
+    if (d.type === 'MESSAGE_LIMIT') {
+      // Live SSE limit event during a completion
+      const ml = d.payload;
+      if (ml.resetsAt) state.resetAt = ml.resetsAt;
+
+      // Hard limit detection from the real API, not banner text
+      if (ml.type === 'exceeded_limit' || ml.type === 'rate_limited') {
+        if (machineState !== 'LIMITED') {
+          state.limited = true;
+          state.resetAt = ml.resetsAt || state.sessionReset || (Date.now() + 3600000);
+          chrome.runtime.sendMessage({ type: 'SET_ALARM', resetAt: state.resetAt });
+          transition('LIMITED');
+        }
+      }
+      LOG('message_limit:', ml);
+    }
+
+    if (d.type === 'INTERCEPTOR_READY') {
+      LOG('interceptor ready in page context');
+    }
+  });
+
   // ─── Background messages ──────────────────────────────────────────────────────
   chrome.runtime.onMessage.addListener((msg) => {
     if (msg.type === 'LIMIT_RESET') { state.limited = false; tick(); }
