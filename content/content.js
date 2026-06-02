@@ -321,12 +321,23 @@
     transition('IDLE');
     renderQueueList();
 
-    // Auto-clear done items after 4s so the queue stays clean
-    setTimeout(() => {
-      state.queue = state.queue.filter(q => q.status === 'pending');
-      saveState();
-      renderQueueList();
-    }, 4000);
+    // Auto-clear ONLY completed items after a short delay (keep pending + failed).
+    if (state.autoClear) {
+      setTimeout(() => clearDone(), 3000);
+    }
+  }
+
+  // ─── Clear completed ────────────────────────────────────────────────────────
+  // Removes only status === 'done' items (keeps pending + failed), frees their
+  // attachment blobs, persists, and re-renders. renderQueueList reads state.queue
+  // live so the cleared state is always reflected.
+  function clearDone() {
+    const done = state.queue.filter(q => q.status === 'done');
+    if (!done.length) return;
+    done.forEach(releaseItemAttachments);
+    state.queue = state.queue.filter(q => q.status !== 'done');
+    saveState();
+    renderQueueList();
   }
 
   // ─── Editor text insertion ─────────────────────────────────────────────────────
@@ -472,8 +483,13 @@
             <input type="checkbox" id="pq-wait" ${state.waitForResponse ? 'checked' : ''}>
             <span>Wait for response</span>
           </label>
+          <label class="pq-toggle-row">
+            <input type="checkbox" id="pq-autoclear" ${state.autoClear ? 'checked' : ''}>
+            <span>Auto-clear completed</span>
+          </label>
           <div id="pq-fire-row">
             <button id="pq-fire-btn">Fire queue now</button>
+            <button id="pq-clear-done-btn">Clear done</button>
             <button id="pq-clear-btn">Clear all</button>
           </div>
         </div>
@@ -530,10 +546,16 @@
     document.getElementById('pq-wait').addEventListener('change', e => {
       state.waitForResponse = e.target.checked; saveState();
     });
+    document.getElementById('pq-autoclear').addEventListener('change', e => {
+      state.autoClear = e.target.checked; saveState();
+    });
     document.getElementById('pq-fire-btn').addEventListener('click', () => {
       if (machineState !== 'FIRING') { transition('FIRING'); fireQueue(); }
     });
+    document.getElementById('pq-clear-done-btn').addEventListener('click', () => clearDone());
     document.getElementById('pq-clear-btn').addEventListener('click', () => {
+      // Releasing every item also frees any attachment blobs held in IndexedDB.
+      state.queue.forEach(releaseItemAttachments);
       state.queue = []; saveState(); renderQueueList();
     });
 
@@ -749,6 +771,51 @@
   }
 
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  // ─── Attachment blob store (IndexedDB) ────────────────────────────────────────
+  // chrome.storage can't hold Blobs, so queued attachment bytes live here, keyed
+  // by attachment id. Only small metadata ({id,name,type,size}) goes in the queue
+  // state. No data leaves the browser.
+  const attachStore = (() => {
+    const DB = 'promptq', STORE = 'attachments';
+    let dbp = null;
+    function open() {
+      if (dbp) return dbp;
+      dbp = new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB, 1);
+        req.onupgradeneeded = () => {
+          if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE);
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      return dbp;
+    }
+    function tx(mode, fn) {
+      return open().then(db => new Promise((resolve, reject) => {
+        const t = db.transaction(STORE, mode);
+        const store = t.objectStore(STORE);
+        const r = fn(store);
+        t.oncomplete = () => resolve(r && r.result);
+        t.onerror = () => reject(t.error);
+        t.onabort = () => reject(t.error);
+      }));
+    }
+    return {
+      put: (key, blob) => tx('readwrite', s => s.put(blob, key)),
+      get: (key)       => tx('readonly',  s => s.get(key)),
+      del: (key)       => tx('readwrite', s => s.delete(key)),
+    };
+  })();
+
+  // Free any attachment blobs an item holds in IndexedDB. Safe for items with no
+  // attachments. (The IDB store itself is defined in the attachments section.)
+  function releaseItemAttachments(item) {
+    if (!item || !item.attachments || !item.attachments.length) return;
+    for (const att of item.attachments) {
+      if (att && att.id) attachStore.del(att.id).catch(() => {});
+    }
+  }
 
   // ─── Keyboard shortcut: Cmd+Shift+Q toggles panel ───────────────────────────
   document.addEventListener('keydown', (e) => {
