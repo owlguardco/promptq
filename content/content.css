@@ -184,7 +184,7 @@
 #pq-input::placeholder { color: #bbb; }
 #promptq-panel[data-pq-theme="dark"] #pq-input::placeholder { color: #555; }
 
-#pq-add-row { display: flex; align-items: center; justify-content: space-between; }
+#pq-add-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0 2px; }
 #pq-queue-count { font-size: 10px; color: #bbb; }
 #promptq-panel[data-pq-theme="dark"] #pq-queue-count { color: #555; }
 #pq-add-btn {
@@ -404,7 +404,7 @@
 #pq-input::placeholder { color: #bbb; }
 #promptq-panel[data-pq-theme="dark"] #pq-input::placeholder { color: #555; }
 
-#pq-add-row { display: flex; align-items: center; justify-content: space-between; }
+#pq-add-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0 2px; }
 #pq-queue-count { font-size: 10px; color: #bbb; }
 #promptq-panel[data-pq-theme="dark"] #pq-queue-count { color: #555; }
 #pq-add-btn {
@@ -500,3 +500,4 @@
 #promptq-panel[data-pq-theme="dark"] .pq-att { background: rgba(255,255,255,0.07); color: #999; }
 .pq-att-only { font-style: italic; color: #bbb; }
 #promptq-panel[data-pq-theme="dark"] .pq-att-only { color: #666; }
+
