@@ -60,11 +60,21 @@ promptq injects a queue panel into claude.ai. Type your next prompts while Claud
 
 ## How it works
 
-**Content script** (`content/content.js`) — the core. Watches the claude.ai DOM with a debounced `MutationObserver`. Detects two signals: the send button state (orange arrow = ready, stop square = streaming) and the rate limit banner. Runs a 4-state machine: `IDLE → STREAMING → LIMITED → FIRING`. Injects the queue UI above the composer bar.
+**Interceptor** (`content/interceptor.js`) — runs in the page context and hooks `fetch` before claude.ai's own code uses it. Reads limit data straight from Claude's own traffic: the `/usage` endpoint (exact session and weekly reset timestamps) and the live SSE `message_limit` events that stream during responses. This is the same technique [Claude Counter](https://github.com/she-llac/claude-counter) uses, and it's far more accurate than parsing the rounded percentages shown in the UI.
+
+**Content script** (`content/content.js`) — the core. Receives limit data from the interceptor and watches the send button state (orange arrow = ready, stop square = streaming). Runs a 4-state machine: `IDLE → STREAMING → LIMITED → FIRING`. Injects the queue UI above the composer bar.
 
 **Background service worker** (`background/service-worker.js`) — sets a `chrome.alarms` timer for the rate limit reset time. Fires even when the tab is backgrounded. Sends a `LIMIT_RESET` message to the content script when the alarm triggers.
 
 **Popup** (`popup/popup.html`) — quick status and settings from the extension icon.
+
+---
+
+## A note on reliability
+
+promptq reads Claude's usage endpoints to know when limits reset. These endpoints power Claude's own UI but aren't officially documented as public, so a claude.ai redesign can temporarily break limit detection until the extension is updated. This is a risk shared by every Claude usage-tracker extension. When it happens, the queue still works — you can always fire it manually with **Fire queue now**. Updates are pushed here; run `git pull` and reload the extension to get fixes.
+
+All data stays local. The extension reads only claude.ai's own traffic and your `lastActiveOrg` cookie (to query the usage endpoint). It makes no external requests and collects nothing.
 
 ---
 
@@ -77,3 +87,4 @@ PRs welcome. Keep it focused — one tool, one job.
 ## License
 
 MIT
+
