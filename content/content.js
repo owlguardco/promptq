@@ -11,12 +11,14 @@
     queue: [],
     autoFire: true,
     waitForResponse: true,
-    autoClearDone: true,
     delayBetween: 800,
+    autoClear: true,
     limited: false,
     resetAt: null,
     sessionReset: null,
     weeklyReset: null,
+    sessionUtil: 0,   // 0-100, from API (source of truth for hard-limit)
+    weeklyUtil: 0,    // 0-100, from API
   };
 
   let machineState  = 'IDLE';
@@ -24,6 +26,7 @@
   let panelOpen     = false;
   let observerStarted = false;
   let renderTimer   = null;
+  let stagedFiles   = [];   // File objects attached to the prompt being composed
 
   // Detect claude.ai's actual theme and apply it to our elements.
   // claude.ai sets class="dark" or data-theme="dark" on <html> or <body>.
@@ -77,8 +80,15 @@
 
   // ─── Persistence ──────────────────────────────────────────────────────────────
   function saveState() {
-    const { queue, autoFire, waitForResponse, autoClearDone, delayBetween } = state;
-    chrome.storage.local.set({ [STATE_KEY]: { queue, autoFire, waitForResponse, autoClearDone, delayBetween } });
+    const { queue, autoFire, waitForResponse, delayBetween, autoClear } = state;
+    // Persist only attachment METADATA, never blobs (those live in IndexedDB).
+    const slimQueue = queue.map(({ id, text, status, attachments }) => ({
+      id, text, status,
+      attachments: (attachments || []).map(({ id, name, type, size }) => ({ id, name, type, size })),
+    }));
+    chrome.storage.local.set({
+      [STATE_KEY]: { queue: slimQueue, autoFire, waitForResponse, delayBetween, autoClear },
+    });
   }
 
   async function loadState() {
@@ -152,61 +162,40 @@
     return false;
   }
 
-  // ─── Rate limit detection ─────────────────────────────────────────────────────
-  function parseResetTime(text) {
-    const t = text || '';
-    const abs = t.match(/resets?\s+(?:at\s+)?(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-    if (abs) {
-      let h = parseInt(abs[1], 10), m = parseInt(abs[2], 10);
-      const ap = abs[3].toUpperCase();
-      if (ap === 'PM' && h !== 12) h += 12;
-      if (ap === 'AM' && h === 12) h = 0;
-      const d = new Date(); d.setHours(h, m, 0, 0);
-      if (d <= new Date()) d.setDate(d.getDate() + 1);
-      return d.getTime();
-    }
-    const dh = t.match(/resets?\s+in\s+(\d+)d\s+(\d+)h/i);
-    if (dh) return Date.now() + (parseInt(dh[1])*24*60 + parseInt(dh[2])*60)*60000;
-    const d2 = t.match(/resets?\s+in\s+(\d+)d/i);
-    if (d2) return Date.now() + parseInt(d2[1])*86400000;
-    const hm = t.match(/resets?\s+in\s+(\d+)h\s+(\d+)m/i);
-    if (hm) return Date.now() + (parseInt(hm[1])*60 + parseInt(hm[2]))*60000;
-    const h2 = t.match(/resets?\s+in\s+(\d+)h/i);
-    if (h2) return Date.now() + parseInt(h2[1])*3600000;
-    const m2 = t.match(/resets?\s+in\s+(\d+)m/i);
-    if (m2) return Date.now() + parseInt(m2[1])*60000;
-    return null;
-  }
-
-  function parseMeterBar() {
-    // claude.ai now shows only one reset timer — Weekly.
-    // Bar text: "Weekly: X% · resets in 1d 14h"
-    // We grab the first "resets in …" we find and treat it as the weekly reset.
-    let sessionReset = null;
-    let weeklyReset  = null;
-
-    const allText = document.body.innerText || '';
-
-    // Try Weekly first
-    const wm = allText.match(/Weekly[^\n]*?resets?\s+in\s+([\d]+d[\s\d]+h|[\d]+h[\s\d]+m|[\d]+h|[\d]+m|[\d]+d)/i);
-    if (wm) weeklyReset = parseResetTime('resets in ' + wm[1].trim());
-
-    // Try Session (may come back in future)
-    const sm = allText.match(/Session[^\n]*?resets?\s+in\s+([\d]+d[\s\d]+h|[\d]+h[\s\d]+m|[\d]+h|[\d]+m|[\d]+d)/i);
-    if (sm) sessionReset = parseResetTime('resets in ' + sm[1].trim());
-
-    // Fallback: just grab any "resets in X" if no labels found
-    if (!weeklyReset && !sessionReset) {
-      const any = allText.match(/resets?\s+in\s+([\d]+d[\s\d]+h|[\d]+h[\s\d]+m|[\d]+h|[\d]+m|[\d]+d)/i);
-      if (any) weeklyReset = parseResetTime('resets in ' + any[1].trim());
-    }
-
-    return { sessionReset, weeklyReset };
-  }
-
+  // ─── Rate limit detection — API only, no DOM scraping ─────────────────────────
+  // The interceptor (MAIN world) posts normalized usage from Claude's own /usage
+  // endpoint and SSE message_limit events. A window is exhausted when its
+  // utilization hits 100% and its reset is still in the future.
   function isHardLimited() {
-    const body = document.body.innerText || '';
-    return ['Usage limit reached', "You've reached your", 'Keep working'].some(p => body.includes(p));
+    const now = Date.now();
+    return (state.sessionUtil >= 100 && state.sessionReset > now)
+        || (state.weeklyUtil  >= 100 && state.weeklyReset  > now);
+  }
+
+  // Which reset timestamp to count down to while limited — prefer the window that
+  // is actually exhausted, falling back to whichever reset we know about.
+  function limitedResetAt() {
+    const now = Date.now();
+    if (state.sessionUtil >= 100 && state.sessionReset > now) return state.sessionReset;
+    if (state.weeklyUtil  >= 100 && state.weeklyReset  > now) return state.weeklyReset;
+    return state.sessionReset || state.weeklyReset || (now + 3600000);
+  }
+
+  // Apply a normalized usage payload from the interceptor (USAGE or MESSAGE_LIMIT).
+  // Shape: { session?: {resetsAt, utilization}, weekly?: {resetsAt, utilization} }
+  function applyUsage(payload) {
+    if (!payload) return;
+    if (payload.session) {
+      if (payload.session.resetsAt) state.sessionReset = payload.session.resetsAt;
+      if (typeof payload.session.utilization === 'number') state.sessionUtil = payload.session.utilization;
+    }
+    if (payload.weekly) {
+      if (payload.weekly.resetsAt) state.weeklyReset = payload.weekly.resetsAt;
+      if (typeof payload.weekly.utilization === 'number') state.weeklyUtil = payload.weekly.utilization;
+    }
+    // Re-evaluate the state machine now that limits may have changed.
+    scheduleTick(true);
+    updateUI();
   }
 
   // ─── Composer container detection ─────────────────────────────────────────────
@@ -246,16 +235,8 @@
     if (loopRunning) return;
     loopRunning = true;
     try {
-      // parseMeterBar does a full TreeWalker scan — only run it every 5s,
-      // not on every attribute-change tick (which fires hundreds of times/sec)
-      const now = Date.now();
-      if (!tick.lastMeterScan || now - tick.lastMeterScan > 5000) {
-        tick.lastMeterScan = now;
-        const { sessionReset, weeklyReset } = parseMeterBar();
-        if (sessionReset) state.sessionReset = sessionReset;
-        if (weeklyReset)  state.weeklyReset  = weeklyReset;
-      }
-
+      // Limit state is driven entirely by the API now (interceptor → applyUsage);
+      // no DOM scraping here.
       const limited   = isHardLimited();
       const streaming = isStreaming();
       const arrowUp   = isArrowReady();
@@ -266,7 +247,7 @@
 
       if (limited) {
         if (machineState !== 'LIMITED') {
-          const resetAt = sessionReset || weeklyReset || (Date.now() + 3600000);
+          const resetAt = limitedResetAt();
           state.limited = true;
           state.resetAt = resetAt;
           chrome.runtime.sendMessage({ type: 'SET_ALARM', resetAt });
@@ -315,7 +296,7 @@
       item.status = 'sending';
       saveState(); renderQueueList();
 
-      const ok = await submitPrompt(item.text);
+      const ok = await submitPrompt(item);
       item.status = ok ? 'done' : 'failed';
       saveState(); renderQueueList();
 
@@ -341,18 +322,23 @@
     transition('IDLE');
     renderQueueList();
 
-    // Auto-clear ONLY done items after 3s (keeps pending + failed).
-    if (state.autoClearDone !== false) {
-      setTimeout(() => {
-        const before = state.queue.length;
-        state.queue = state.queue.filter(q => q.status !== 'done');
-        if (state.queue.length !== before) {
-          saveState();
-          renderQueueList();
-          LOG('auto-cleared done items');
-        }
-      }, 3000);
+    // Auto-clear ONLY completed items after a short delay (keep pending + failed).
+    if (state.autoClear) {
+      setTimeout(() => clearDone(), 3000);
     }
+  }
+
+  // ─── Clear completed ────────────────────────────────────────────────────────
+  // Removes only status === 'done' items (keeps pending + failed), frees their
+  // attachment blobs, persists, and re-renders. renderQueueList reads state.queue
+  // live so the cleared state is always reflected.
+  function clearDone() {
+    const done = state.queue.filter(q => q.status === 'done');
+    if (!done.length) return;
+    done.forEach(releaseItemAttachments);
+    state.queue = state.queue.filter(q => q.status !== 'done');
+    saveState();
+    renderQueueList();
   }
 
   // ─── Editor text insertion ─────────────────────────────────────────────────────
@@ -406,7 +392,9 @@
   }
 
   // ─── Submit ───────────────────────────────────────────────────────────────────
-  async function submitPrompt(text) {
+  async function submitPrompt(item) {
+    const text        = typeof item === 'string' ? item : (item?.text || '');
+    const attachments = (item && typeof item === 'object' && item.attachments) ? item.attachments : [];
     try {
       if (!isArrowReady()) {
         const ready = await waitForArrow();
@@ -416,7 +404,20 @@
       if (editable) {
         editable.focus();
         await sleep(100);
-        insertEditableText(editable, text);
+        if (text) insertEditableText(editable, text);
+
+        // Re-attach files via claude.ai's own upload pipeline, then wait for the
+        // send button to re-enable (uploads complete) before clicking it.
+        if (attachments.length) {
+          const files = await loadAttachmentFiles(attachments);
+          if (files.length) {
+            await attachFilesToComposer(files);
+            await sleep(400);
+            const uploaded = await waitForArrow();
+            if (!uploaded) { LOG('attachment upload timed out'); return false; }
+          }
+        }
+
         await sleep(250);
         const btn = getSendButton();
         if (btn && !btn.disabled) { btn.click(); return true; }
@@ -483,8 +484,11 @@
           <div id="pq-empty">No prompts queued yet.<br>Add one below to keep your flow.</div>
         </div>
         <div id="pq-add-section">
-          <textarea id="pq-input" placeholder="Queue your next prompt... (Cmd+Enter to add)" rows="3"></textarea>
+          <textarea id="pq-input" placeholder="Queue your next prompt... (Cmd+Enter to add · drop files to attach)" rows="3"></textarea>
+          <div id="pq-attach-stage"></div>
           <div id="pq-add-row">
+            <button id="pq-attach-btn" title="Attach files">📎</button>
+            <input type="file" id="pq-file-input" multiple hidden>
             <span id="pq-queue-count">0 queued</span>
             <button id="pq-add-btn">+ Add</button>
           </div>
@@ -499,7 +503,7 @@
             <span>Wait for response</span>
           </label>
           <label class="pq-toggle-row">
-            <input type="checkbox" id="pq-autoclear" ${state.autoClearDone !== false ? 'checked' : ''}>
+            <input type="checkbox" id="pq-autoclear" ${state.autoClear ? 'checked' : ''}>
             <span>Auto-clear completed</span>
           </label>
           <div id="pq-fire-row">
@@ -555,27 +559,46 @@
     document.getElementById('pq-input').addEventListener('keydown', e => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); addPrompt(); }
     });
+
+    // ── Attachments: paperclip → file picker, plus drag-drop onto the textarea ──
+    const fileInput = document.getElementById('pq-file-input');
+    document.getElementById('pq-attach-btn').addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', e => {
+      stageFiles(e.target.files);
+      fileInput.value = ''; // allow re-picking the same file
+    });
+    const inputEl = document.getElementById('pq-input');
+    ['dragenter', 'dragover'].forEach(ev => inputEl.addEventListener(ev, e => {
+      e.preventDefault(); e.stopPropagation(); inputEl.classList.add('pq-drag');
+    }));
+    ['dragleave', 'dragend'].forEach(ev => inputEl.addEventListener(ev, e => {
+      e.preventDefault(); inputEl.classList.remove('pq-drag');
+    }));
+    inputEl.addEventListener('drop', e => {
+      e.preventDefault(); e.stopPropagation(); inputEl.classList.remove('pq-drag');
+      if (e.dataTransfer?.files?.length) stageFiles(e.dataTransfer.files);
+    });
     document.getElementById('pq-autofire').addEventListener('change', e => {
       state.autoFire = e.target.checked; saveState();
     });
     document.getElementById('pq-wait').addEventListener('change', e => {
       state.waitForResponse = e.target.checked; saveState();
     });
+    document.getElementById('pq-autoclear').addEventListener('change', e => {
+      state.autoClear = e.target.checked; saveState();
+    });
     document.getElementById('pq-fire-btn').addEventListener('click', () => {
       if (machineState !== 'FIRING') { transition('FIRING'); fireQueue(); }
     });
+    document.getElementById('pq-clear-done-btn').addEventListener('click', () => clearDone());
     document.getElementById('pq-clear-btn').addEventListener('click', () => {
+      // Releasing every item also frees any attachment blobs held in IndexedDB.
+      state.queue.forEach(releaseItemAttachments);
       state.queue = []; saveState(); renderQueueList();
-    });
-    document.getElementById('pq-clear-done-btn').addEventListener('click', () => {
-      state.queue = state.queue.filter(q => q.status !== 'done');
-      saveState(); renderQueueList();
-    });
-    document.getElementById('pq-autoclear').addEventListener('change', e => {
-      state.autoClearDone = e.target.checked; saveState();
     });
 
     renderQueueList();
+    renderStage();
     updateUI();
     applyTheme();
     startCountdown();
@@ -650,15 +673,18 @@
     statusText.textContent = cfg.panelText;
 
     if (meterRow) {
-      const parts = [];
-      if (state.sessionReset && state.sessionReset > Date.now())
-        parts.push(`Session resets in ${formatMs(state.sessionReset - Date.now())}`);
-      if (state.weeklyReset && state.weeklyReset > Date.now())
-        parts.push(`Weekly resets in ${formatMs(state.weeklyReset - Date.now())}`);
-      // If only one exists show it without a label prefix
-      meterRow.textContent   = parts.length === 1
-        ? parts[0].replace(/^(Session|Weekly) resets in /, 'Resets in ')
-        : parts.join('  ·  ');
+      const now = Date.now();
+      const fmtWindow = (label, util, reset) => {
+        const bits = [];
+        if (typeof util === 'number' && util > 0) bits.push(`${Math.round(util)}%`);
+        if (reset && reset > now) bits.push(`resets in ${formatMs(reset - now)}`);
+        return bits.length ? `${label} ${bits.join(' · ')}` : null;
+      };
+      const parts = [
+        fmtWindow('Session', state.sessionUtil, state.sessionReset),
+        fmtWindow('Weekly',  state.weeklyUtil,  state.weeklyReset),
+      ].filter(Boolean);
+      meterRow.textContent   = parts.join('   ·   ');
       meterRow.style.display = parts.length ? '' : 'none';
     }
   }
@@ -675,7 +701,7 @@
   }
 
   // ─── Queue list ───────────────────────────────────────────────────────────────
-  function addPrompt() {
+  async function addPrompt() {
     // Read from the main claude.ai composer, not a separate textarea
     const editable = document.querySelector('div[contenteditable="true"], [role="textbox"]');
     const ta       = document.querySelector('textarea');
@@ -703,12 +729,122 @@
       }
     }
 
-    if (!text) return;
-    state.queue.push({ id: Date.now(), text, status: 'pending' });
+    if (!text && stagedFiles.length === 0) return;
+
+    const id = Date.now();
+    // Persist staged file bytes to IndexedDB; keep only metadata on the queue item.
+    const attachments = [];
+    for (let i = 0; i < stagedFiles.length; i++) {
+      const f = stagedFiles[i];
+      const attId = `${id}-${i}`;
+      try {
+        await attachStore.put(attId, f);
+        attachments.push({ id: attId, name: f.name, type: f.type, size: f.size });
+      } catch (e) { LOG('attach store failed', f.name, e); }
+    }
+
+    state.queue.push({ id, text, status: 'pending', attachments });
+    stagedFiles = [];
+    renderStage();
     saveState();
     scheduleRender();
     if (!panelOpen) openPanel();
-    LOG('queued:', text.slice(0, 50));
+    LOG('queued:', text.slice(0, 50), attachments.length ? `+${attachments.length} file(s)` : '');
+  }
+
+  // ─── Staged attachments (pre-queue) ───────────────────────────────────────────
+  function isImageType(t) { return /^image\//.test(t || ''); }
+
+  function stageFiles(fileList) {
+    for (const f of fileList) stagedFiles.push(f);
+    renderStage();
+  }
+
+  function renderStage() {
+    const stage = document.getElementById('pq-attach-stage');
+    if (!stage) return;
+    if (!stagedFiles.length) { stage.innerHTML = ''; stage.style.display = 'none'; return; }
+    stage.style.display = 'flex';
+    stage.innerHTML = stagedFiles.map((f, i) => `
+      <span class="pq-chip" title="${escHtml(f.name)}">
+        <span class="pq-chip-ic">${isImageType(f.type) ? '🖼' : '📎'}</span>
+        <span class="pq-chip-name">${escHtml(f.name)}</span>
+        <button class="pq-chip-x" data-i="${i}" title="Remove">×</button>
+      </span>`).join('');
+    stage.querySelectorAll('.pq-chip-x').forEach(b => b.addEventListener('click', () => {
+      stagedFiles.splice(+b.dataset.i, 1); renderStage();
+    }));
+  }
+
+  // Build chips for an already-queued item's attachments (display only).
+  function attHtml(item) {
+    if (!item.attachments || !item.attachments.length) return '';
+    return `<div class="pq-item-atts">` + item.attachments.map(a =>
+      `<span class="pq-att" title="${escHtml(a.name)}">${isImageType(a.type) ? '🖼' : '📎'} ${escHtml(a.name)}</span>`
+    ).join('') + `</div>`;
+  }
+
+  // Load queued attachment metadata back into real File objects from IndexedDB.
+  async function loadAttachmentFiles(attachments) {
+    const files = [];
+    for (const a of attachments || []) {
+      try {
+        const blob = await attachStore.get(a.id);
+        if (blob) files.push(new File([blob], a.name, { type: a.type || blob.type || 'application/octet-stream' }));
+      } catch (e) { LOG('load attachment failed', a.id, e); }
+    }
+    return files;
+  }
+
+  // claude.ai's own hidden file input (never our own #pq-file-input).
+  function findComposerFileInput() {
+    const editable = document.querySelector('div[contenteditable="true"], [role="textbox"]');
+    if (editable) {
+      let el = editable.parentElement;
+      for (let i = 0; i < 6 && el; i++) {
+        const inp = el.querySelector('input[type="file"]:not(#pq-file-input)');
+        if (inp) return inp;
+        el = el.parentElement;
+      }
+    }
+    return document.querySelector('input[type="file"]:not(#pq-file-input)');
+  }
+
+  // Replay files into claude.ai's composer so its native upload runs. Tries the
+  // real file input first (most reliable), then a synthetic drop, then paste.
+  async function attachFilesToComposer(files) {
+    const dt = new DataTransfer();
+    for (const f of files) dt.items.add(f);
+
+    const fileInput = findComposerFileInput();
+    if (fileInput) {
+      try {
+        fileInput.files = dt.files;
+        fileInput.dispatchEvent(new Event('input', { bubbles: true }));
+        fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+        return true;
+      } catch (e) { LOG('file-input inject failed', e); }
+    }
+
+    const editable = document.querySelector('div[contenteditable="true"], [role="textbox"]');
+    const target = editable?.closest('form') || editable?.parentElement || editable;
+    if (target) {
+      try {
+        for (const type of ['dragenter', 'dragover', 'drop']) {
+          target.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
+        }
+        return true;
+      } catch (e) { LOG('drop inject failed', e); }
+    }
+
+    if (editable) {
+      try {
+        editable.focus();
+        editable.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: dt }));
+        return true;
+      } catch (e) { LOG('paste inject failed', e); }
+    }
+    return false;
   }
 
   function renderQueueList() {
@@ -726,7 +862,7 @@
     list.innerHTML = state.queue.map((item, i) => `
       <div class="pq-item pq-status-${item.status}">
         <div class="pq-item-pos">${item.status === 'sending' ? '▶' : i + 1}</div>
-        <div class="pq-item-text">${escHtml(item.text)}</div>
+        <div class="pq-item-text">${item.text ? escHtml(item.text) : '<span class="pq-att-only">(attachment only)</span>'}${attHtml(item)}</div>
         <div class="pq-item-actions">
           ${item.status === 'pending' ? `
             <button class="pq-move-up"   data-idx="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
@@ -785,6 +921,51 @@
 
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+  // ─── Attachment blob store (IndexedDB) ────────────────────────────────────────
+  // chrome.storage can't hold Blobs, so queued attachment bytes live here, keyed
+  // by attachment id. Only small metadata ({id,name,type,size}) goes in the queue
+  // state. No data leaves the browser.
+  const attachStore = (() => {
+    const DB = 'promptq', STORE = 'attachments';
+    let dbp = null;
+    function open() {
+      if (dbp) return dbp;
+      dbp = new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB, 1);
+        req.onupgradeneeded = () => {
+          if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE);
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      return dbp;
+    }
+    function tx(mode, fn) {
+      return open().then(db => new Promise((resolve, reject) => {
+        const t = db.transaction(STORE, mode);
+        const store = t.objectStore(STORE);
+        const r = fn(store);
+        t.oncomplete = () => resolve(r && r.result);
+        t.onerror = () => reject(t.error);
+        t.onabort = () => reject(t.error);
+      }));
+    }
+    return {
+      put: (key, blob) => tx('readwrite', s => s.put(blob, key)),
+      get: (key)       => tx('readonly',  s => s.get(key)),
+      del: (key)       => tx('readwrite', s => s.delete(key)),
+    };
+  })();
+
+  // Free any attachment blobs an item holds in IndexedDB. Safe for items with no
+  // attachments. (The IDB store itself is defined in the attachments section.)
+  function releaseItemAttachments(item) {
+    if (!item || !item.attachments || !item.attachments.length) return;
+    for (const att of item.attachments) {
+      if (att && att.id) attachStore.del(att.id).catch(() => {});
+    }
+  }
+
   // ─── Keyboard shortcut: Cmd+Shift+Q toggles panel ───────────────────────────
   document.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'Q') {
@@ -802,29 +983,13 @@
     const d = event.data;
     if (!d || d.source !== 'promptq-interceptor') return;
 
-    if (d.type === 'USAGE') {
-      // Full usage snapshot: { session: {resetsAt, utilization}, weekly: {...} }
-      if (d.payload.session?.resetsAt) state.sessionReset = d.payload.session.resetsAt;
-      if (d.payload.weekly?.resetsAt)  state.weeklyReset  = d.payload.weekly.resetsAt;
-      LOG('usage from API:', d.payload);
-      updateUI();
-    }
-
-    if (d.type === 'MESSAGE_LIMIT') {
-      // Live SSE limit event during a completion
-      const ml = d.payload;
-      if (ml.resetsAt) state.resetAt = ml.resetsAt;
-
-      // Hard limit detection from the real API, not banner text
-      if (ml.type === 'exceeded_limit' || ml.type === 'rate_limited') {
-        if (machineState !== 'LIMITED') {
-          state.limited = true;
-          state.resetAt = ml.resetsAt || state.sessionReset || (Date.now() + 3600000);
-          chrome.runtime.sendMessage({ type: 'SET_ALARM', resetAt: state.resetAt });
-          transition('LIMITED');
-        }
-      }
-      LOG('message_limit:', ml);
+    // Both USAGE (full snapshot) and MESSAGE_LIMIT (live SSE) arrive already
+    // normalized to { session?: {resetsAt, utilization}, weekly?: {resetsAt, utilization} }.
+    // applyUsage() updates state and lets the state machine derive LIMITED from
+    // utilization >= 100 — no separate "exceeded" type to special-case.
+    if (d.type === 'USAGE' || d.type === 'MESSAGE_LIMIT') {
+      LOG(d.type, d.payload);
+      applyUsage(d.payload);
     }
 
     if (d.type === 'INTERCEPTOR_READY') {
@@ -894,11 +1059,6 @@
   // ─── Init ─────────────────────────────────────────────────────────────────────
   async function init() {
     await loadState();
-    // Clear any stale 'done' items left over from a previous session
-    if (state.autoClearDone !== false && state.queue.some(q => q.status === 'done')) {
-      state.queue = state.queue.filter(q => q.status !== 'done');
-      saveState();
-    }
     startObserver();
     tick();
   }
@@ -909,7 +1069,6 @@
     init();
   }
 })();
-
 
 
 

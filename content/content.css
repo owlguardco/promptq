@@ -200,21 +200,17 @@
 .pq-toggle-row { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #777; cursor: pointer; }
 #promptq-panel[data-pq-theme="dark"] .pq-toggle-row { color: #888; }
 .pq-toggle-row input { accent-color: #D85A30; width: 12px; height: 12px; cursor: pointer; }
-#pq-fire-row { display: flex; gap: 4px; margin-top: 2px; flex-wrap: wrap; }
-#pq-fire-btn { flex: 1 1 100%; }
-#pq-clear-done-btn, #pq-clear-btn { flex: 1 1 0; }
+#pq-fire-row { display: flex; gap: 4px; margin-top: 2px; }
 #pq-fire-btn {
   flex: 1; background: #D85A30; color: #fff; border: none;
   border-radius: 4px; padding: 5px 8px; font-size: 11px; font-weight: 500; cursor: pointer; font-family: inherit;
 }
 #pq-fire-btn:hover:not(:disabled) { background: #b84d28; }
 #pq-fire-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-#pq-clear-btn, #pq-clear-done-btn {
+#pq-clear-btn {
   background: none; border: 1px solid rgba(0,0,0,0.1); border-radius: 4px;
   padding: 5px 7px; font-size: 11px; color: #888; cursor: pointer; font-family: inherit;
 }
-#pq-clear-done-btn:hover { background: rgba(0,0,0,0.04); }
-#promptq-panel[data-pq-theme="dark"] #pq-clear-done-btn { border-color: rgba(255,255,255,0.1); color: #888; }
 #promptq-panel[data-pq-theme="dark"] #pq-clear-btn { border-color: rgba(255,255,255,0.1); color: #777; }
 #pq-clear-btn:hover { background: rgba(0,0,0,0.04); }
 
@@ -458,3 +454,49 @@
 }
 #promptq-panel[data-pq-theme="dark"] #pq-shortcut { color: rgba(255,255,255,0.2); }
 
+/* Clear done button — mirrors Clear all */
+#pq-clear-done-btn {
+  background: none; border: 1px solid rgba(0,0,0,0.1); border-radius: 4px;
+  padding: 5px 7px; font-size: 11px; color: #888; cursor: pointer; font-family: inherit;
+  white-space: nowrap;
+}
+#promptq-panel[data-pq-theme="dark"] #pq-clear-done-btn { border-color: rgba(255,255,255,0.1); color: #777; }
+#pq-clear-done-btn:hover { background: rgba(0,0,0,0.04); }
+
+/* ── Attachments ─────────────────────────────────────────────────────────── */
+/* Attach (paperclip) button */
+#pq-attach-btn {
+  background: none; border: 1px solid rgba(0,0,0,0.1); border-radius: 4px;
+  padding: 3px 7px; font-size: 12px; line-height: 1; cursor: pointer;
+  color: #888; font-family: inherit; margin-right: auto;
+}
+#promptq-panel[data-pq-theme="dark"] #pq-attach-btn { border-color: rgba(255,255,255,0.1); }
+#pq-attach-btn:hover { background: rgba(0,0,0,0.04); }
+
+/* Drag-over highlight on the textarea */
+#pq-input.pq-drag { border-color: #D85A30; background: rgba(216,90,48,0.06); }
+
+/* Staging row (files attached to the prompt being composed) */
+#pq-attach-stage { display: none; flex-wrap: wrap; gap: 4px; }
+.pq-chip {
+  display: inline-flex; align-items: center; gap: 4px; max-width: 100%;
+  background: rgba(216,90,48,0.1); border: 1px solid rgba(216,90,48,0.25);
+  border-radius: 4px; padding: 2px 4px 2px 6px; font-size: 10px; color: #b84d28;
+}
+.pq-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+.pq-chip-x {
+  background: none; border: none; cursor: pointer; color: #b84d28;
+  font-size: 12px; line-height: 1; padding: 0 2px; font-family: inherit;
+}
+.pq-chip-x:hover { color: #C0392B; }
+
+/* Attachment chips on a queued item (display only) */
+.pq-item-atts { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+.pq-att {
+  display: inline-flex; align-items: center; gap: 3px; max-width: 100%;
+  background: rgba(0,0,0,0.05); border-radius: 3px; padding: 1px 5px;
+  font-size: 9px; color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#promptq-panel[data-pq-theme="dark"] .pq-att { background: rgba(255,255,255,0.07); color: #999; }
+.pq-att-only { font-style: italic; color: #bbb; }
+#promptq-panel[data-pq-theme="dark"] .pq-att-only { color: #666; }
