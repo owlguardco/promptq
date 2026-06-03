@@ -1059,6 +1059,12 @@
   // ─── Init ─────────────────────────────────────────────────────────────────────
   async function init() {
     await loadState();
+    // Clear any stale 'done' items left from a previous session on page load
+    if (state.autoClear !== false && state.queue.some(q => q.status === 'done')) {
+      state.queue = state.queue.filter(q => q.status !== 'done');
+      saveState();
+      LOG('cleared stale done items on load');
+    }
     startObserver();
     tick();
   }
@@ -1069,6 +1075,7 @@
     init();
   }
 })();
+
 
 
 
